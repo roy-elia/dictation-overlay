@@ -1,4 +1,4 @@
-# Dictation Overlay
+# RoyFlow
 
 A personal macOS dictation pill built with Electron. It has four native pillars.
 

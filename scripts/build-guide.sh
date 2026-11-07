@@ -30,7 +30,7 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key><string>dev.personal.dictation-overlay.permission-guide</string>
-  <key>CFBundleName</key><string>PermissionGuide</string>
+  <key>CFBundleName</key><string>RoyFlow Permission Guide</string>
   <key>CFBundleExecutable</key><string>PermissionGuide</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>

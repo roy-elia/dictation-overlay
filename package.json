@@ -33,7 +33,7 @@
   },
   "build": {
     "appId": "dev.personal.dictation-overlay",
-    "productName": "Dictation Overlay",
+    "productName": "RoyFlow",
     "mac": {
       "target": [
         {

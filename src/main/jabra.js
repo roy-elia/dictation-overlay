@@ -16,7 +16,7 @@ const SUPPORTED = /evolve\s*3\s*(75|85)/i;
 const PROPERTY = process.env.JABRA_ONHEAD_PROPERTY || 'onHeadDetectionStatus';
 
 class JabraOnHead extends EventEmitter {
-  constructor({ partnerKey, appId = 'dictation-overlay', appName = 'Dictation Overlay', log = console } = {}) {
+  constructor({ partnerKey, appId = 'royflow', appName = 'RoyFlow', log = console } = {}) {
     super();
     Object.assign(this, { partnerKey, appId, appName, log });
     this.sdk = null;

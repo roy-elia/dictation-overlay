@@ -144,6 +144,7 @@ function registerIpc() {
   handle('settings:set', (key, value) => { config.set('settings', key, value); return config.settings; });
   handle('app:state', () => appState());
   handle('app:open-settings', (tab) => openSettings(tab));
+  handle('app:download-model', () => { whisper.downloadModel(config.setting('whisperModel')).catch((e) => { ctx.download = { phase: 'error', error: e.message }; broadcast('ev:app-state', appState()); }); return true; });
   handle('permissions:status', () => permissions.refresh());
 
   // history
@@ -189,7 +190,7 @@ function appState() {
     hotkeysOk: !!ctx.hotkeysOk,
     accessibility: input.isTrusted(false),
     microphone: systemPreferences.getMediaAccessStatus('microphone'),
-    whisper: { model: whisper.model, hasModel: whisper.hasModel(), running: !!whisper.proc },
+    whisper: { model: whisper.model, hasModel: whisper.hasModel(), coreml: whisper.hasCoreML(), running: !!whisper.proc, downloading: !!whisper.downloading, progress: ctx.download || null },
     lastTranscript: dictation.lastTranscript,
   };
 }
@@ -212,6 +213,11 @@ app.whenReady().then(async () => {
   ai = new ClaudeAI({ config, log });
   ctx.stats = () => store.stats();
   whisper = new WhisperServer({ log });
+  let lastBroadcast = 0;
+  whisper.on('download', (d) => {
+    ctx.download = d;
+    if (d.phase === 'done' || Date.now() - lastBroadcast > 500) { lastBroadcast = Date.now(); broadcast('ev:app-state', appState()); }
+  });
   applyRetention();
   setInterval(applyRetention, 60 * 60 * 1000);
 
@@ -305,7 +311,8 @@ app.whenReady().then(async () => {
     trayUi.render();
   });
 
-  whisper.start(config.setting('whisperModel')).catch(() => {});
+  if (whisper.hasModel(config.setting('whisperModel'))) whisper.start(config.setting('whisperModel')).catch(() => {});
+  else if (!process.env.DICTATION_SELFTEST) openSettings('general'); // first run: offer the model download
   await syncJabra();
   if (process.env.DICTATION_SELFTEST) await selfTest();
 });

@@ -44,6 +44,26 @@ const LANGS = [
   ['vi', 'Vietnamese'], ['th', 'Thai'], ['id', 'Indonesian'], ['ms', 'Malay'], ['tl', 'Tagalog'], ['ro', 'Romanian'],
 ];
 
+function modelRow(st) {
+  const w = st.whisper, p = w.progress;
+  const mb = (n) => `${Math.round(n / 1e6)} MB`;
+  let sub = `${w.model}${w.coreml ? ' · Neural Engine' : ''}`;
+  let right;
+  if (w.downloading && p && p.total) {
+    sub = `Downloading ${p.phase === 'coreml' ? 'Neural Engine encoder' : 'speech model'}: ${mb(p.done)} of ${mb(p.total)}`;
+    right = status('warn', `${Math.floor((p.done / p.total) * 100)}%`);
+  } else if (w.downloading) {
+    right = status('warn', 'Starting…');
+  } else if (!w.hasModel) {
+    sub = 'Needs a one-time download (~574 MB, plus ~1.2 GB Neural Engine encoder on Apple silicon). Stays on this Mac.';
+    right = h('button', { class: 'primary', onclick: async () => { await rf.call('app:download-model'); render(); } }, 'Download');
+  } else {
+    right = status(w.running ? 'ok' : 'warn', w.running ? 'Loaded' : 'Loading…');
+  }
+  if (p?.phase === 'error') sub = `Download failed: ${p.error}`;
+  return row('Speech model', sub, right);
+}
+
 async function renderGeneral() {
   const st = await rf.call('app:state');
   const langs = S.languages || [];
@@ -61,8 +81,7 @@ async function renderGeneral() {
       row('Keyboard shortcut', st.hotkeysOk ? 'The fn key is being watched.' : 'Needs Accessibility permission to watch the fn key.',
         st.hotkeysOk ? status('ok', 'Working') : h('button', { onclick: () => rf.call('permissions:guide', ['accessibility']) }, 'Grant Access…')),
       row('Microphone access', null, status(st.microphone === 'granted' ? 'ok' : 'bad', st.microphone === 'granted' ? 'Allowed' : 'Not allowed')),
-      row('Speech model', st.whisper.model,
-        st.whisper.hasModel ? status(st.whisper.running ? 'ok' : 'warn', st.whisper.running ? 'Loaded' : 'Loading…') : status('bad', 'Missing'))),
+      modelRow(st)),
 
     h('h2', {}, 'Shortcuts'),
     h('div', { class: 'card' },

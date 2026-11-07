@@ -44,6 +44,26 @@ function toWav(pcm16) {
 // Things Whisper emits for silence/noise that must never be pasted.
 const NOISE = /^\s*(\[(BLANK_AUDIO|MUSIC|NOISE|SILENCE)[^\]]*\]|\((music|silence|inaudible)[^)]*\)|thank you\.?|thanks for watching!?|you)\s*$/i;
 
+const COREML_NAME = (model) => model.replace(/\.bin$/, '').replace(/-q\d_\d$/, '') + '-encoder.mlmodelc';
+
+/** Stream a URL to disk with progress; atomic rename at the end. */
+async function download(url, dest, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  const part = `${dest}.part`;
+  const out = fs.createWriteStream(part);
+  let done = 0, last = 0;
+  for await (const chunk of res.body) {
+    if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
+    done += chunk.length;
+    if (Date.now() - last > 250) { last = Date.now(); onProgress?.(done, total); }
+  }
+  await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
+  fs.renameSync(part, dest);
+  onProgress?.(total || done, total || done);
+}
+
 class WhisperServer extends EventEmitter {
   constructor({ log = console } = {}) {
     super();
@@ -55,6 +75,34 @@ class WhisperServer extends EventEmitter {
   }
 
   hasModel(name = this.model) { return fs.existsSync(modelPath(name)); }
+  hasCoreML(name = this.model) { return fs.existsSync(path.join(modelsDir(), COREML_NAME(name))); }
+
+  /**
+   * Download the ggml model and (Apple silicon) its Core ML encoder.
+   * Emits 'download' {phase, done, total}. Restarts the server afterwards.
+   */
+  async downloadModel(name = this.model) {
+    if (this.downloading) return this.downloading;
+    this.downloading = (async () => {
+      fs.mkdirSync(modelsDir(), { recursive: true });
+      const report = (phase) => (done, total) => this.emit('download', { phase, done, total });
+      if (!this.hasModel(name)) await download(MODEL_URL(name), modelPath(name), report('model'));
+      if (process.arch === 'arm64' && !this.hasCoreML(name)) {
+        const zipName = `${COREML_NAME(name)}.zip`;
+        const zip = path.join(modelsDir(), zipName);
+        try {
+          await download(MODEL_URL(zipName), zip, report('coreml'));
+          await new Promise((r, j) => require('child_process').execFile('/usr/bin/ditto', ['-x', '-k', zip, modelsDir()], (e) => (e ? j(e) : r())));
+        } catch (e) {
+          this.log.warn('[whisper] Core ML encoder unavailable, using Metal:', e.message);
+        } finally { fs.rmSync(zip, { force: true }); }
+      }
+      this.emit('download', { phase: 'done' });
+      this.stop();
+      await this.start(name);
+    })().finally(() => { this.downloading = null; });
+    return this.downloading;
+  }
 
   start(model = this.model) {
     if (this.ready && this.model === model) return this.ready;
@@ -62,7 +110,7 @@ class WhisperServer extends EventEmitter {
     this.model = model;
     this.ready = (async () => {
       if (!fs.existsSync(serverBinary())) throw new Error(`whisper-server missing at ${serverBinary()}`);
-      if (!this.hasModel(model)) throw new Error(`model missing: ${modelPath(model)} (download ${MODEL_URL(model)})`);
+      if (!this.hasModel(model)) throw new Error('Download the speech model in RoyFlow Settings first');
       this.port = await freePort();
       const threads = Math.max(2, Math.min(8, require('os').cpus().length - 2));
       this.proc = spawn(serverBinary(), [
@@ -117,4 +165,4 @@ class WhisperServer extends EventEmitter {
   }
 }
 
-module.exports = { WhisperServer, DEFAULT_MODEL, MODEL_URL, modelPath, toWav };
+module.exports = { WhisperServer, DEFAULT_MODEL, MODEL_URL, modelPath, toWav, COREML_NAME, download };

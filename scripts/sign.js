@@ -62,6 +62,7 @@ module.exports = async function sign(ctx) {
   for (const f of [
     path.join(C, 'Resources', 'mediaremote', 'MediaRemoteAdapter.framework'),
     path.join(C, 'Resources', 'PermissionGuide.app'),
+    path.join(C, 'Resources', 'whisper', 'whisper-server'),
   ]) if (fs.existsSync(f)) sign(f);
   // 3. Electron frameworks, then helper apps (helpers need entitlements for JIT).
   const fw = path.join(C, 'Frameworks');

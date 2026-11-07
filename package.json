@@ -6,19 +6,21 @@
   "main": "src/main/main.js",
   "license": "UNLICENSED",
   "scripts": {
-    "postinstall": "electron-rebuild -f -w panel-activation,audio-control,better-sqlite3",
-    "build:native": "electron-rebuild -f -w panel-activation,audio-control",
+    "postinstall": "electron-rebuild -f -w panel-activation,audio-control,input-control,better-sqlite3",
+    "build:native": "electron-rebuild -f -w panel-activation,audio-control,input-control",
     "build:mediaremote": "bash scripts/build-mediaremote.sh",
     "build:guide": "bash scripts/build-guide.sh",
-    "build:all": "npm run build:native && npm run build:mediaremote && npm run build:guide",
+    "build:all": "npm run build:native && npm run build:mediaremote && npm run build:whisper && npm run build:guide",
     "start": "electron .",
     "dist": "npm run build:all && electron-builder --mac --publish never; npm run build:native",
-    "release": "npm run build:all && electron-builder --mac --publish always; npm run build:native"
+    "release": "npm run build:all && electron-builder --mac --publish always; npm run build:native",
+    "build:whisper": "bash scripts/build-whisper.sh"
   },
   "dependencies": {
+    "audio-control": "file:./native/audio_control",
     "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.3.9",
-    "audio-control": "file:./native/audio_control",
+    "input-control": "file:./native/input_control",
     "panel-activation": "file:./native/panel_activation"
   },
   "optionalDependencies": {
@@ -55,7 +57,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Dictation needs the microphone.",
+        "NSMicrophoneUsageDescription": "RoyFlow listens only while you dictate, and transcribes on this Mac.",
         "NSAppleEventsUsageDescription": "Used to mute and restore system volume while dictating."
       },
       "icon": "build/icon.icns",
@@ -77,6 +79,10 @@
       {
         "from": "permission-guide/build/PermissionGuide.app",
         "to": "PermissionGuide.app"
+      },
+      {
+        "from": "vendor/whisper.cpp/build/bin/whisper-server",
+        "to": "whisper/whisper-server"
       }
     ],
     "publish": [
@@ -96,8 +102,8 @@
       "!**/node_modules/*/build/Release/obj.target/**",
       "!**/node_modules/@gnaudio/*/{browser-esm,browser-umd}/**",
       "!**/*.{map,md,ts}",
-      "!**/node_modules/{panel-activation,audio-control}/{bin,src,node_modules}/**",
-      "!**/node_modules/{panel-activation,audio-control}/build/{Makefile,*.mk,*.gypi,gyp-mac-tool}"
+      "!**/node_modules/{panel-activation,audio-control,input-control}/{bin,src,node_modules}/**",
+      "!**/node_modules/{panel-activation,audio-control,input-control}/build/{Makefile,*.mk,*.gypi,gyp-mac-tool}"
     ],
     "afterSign": "./scripts/sign.js"
   },

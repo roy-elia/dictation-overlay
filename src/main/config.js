@@ -7,7 +7,23 @@ const { app } = require('electron');
 const { EventEmitter } = require('events');
 
 const DEFAULT_SETTINGS = {
+  // audio + system
   muteAudioWhileDictating: true,
+  soundsEnabled: true,
+  micDeviceId: null,          // null = system default input
+  launchAtLogin: false,
+  showInDock: false,
+  // dictation
+  languages: [],              // [] = auto-detect; one code = force it; several = auto among them
+  whisperModel: 'ggml-large-v3-turbo-q5_0.bin',
+  pressEnterCommand: false,   // "press enter" at the end of a dictation sends Return
+  // pill
+  hidePill: false,
+  pillEdge: 'bottom',         // bottom | left | right
+  pillOffset: 0.5,            // 0..1 along that edge
+  // history / privacy
+  historyRetention: 'forever', // forever | 24h | never
+  // hardware
   jabraOnHeadDetection: false, // off by default
 };
 

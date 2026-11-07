@@ -1,0 +1,83 @@
+:root {
+  --ink: #f4f5fb;
+  --glass: rgba(22, 24, 40, 0.88);
+  --glass-hi: rgba(40, 44, 72, 0.92);
+  --edge: rgba(255, 255, 255, 0.14);
+  --edge-hi: rgba(255, 255, 255, 0.28);
+  --rec: #ff4b3e;
+  --accent: #8f9bff;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+  font: 500 12px/1 -apple-system, "SF Pro Text", system-ui; color: var(--ink); user-select: none; }
+
+/* The stage fills the window; the pill hugs the docked edge. */
+#stage { position: absolute; inset: 0; display: flex; padding: 0 10px 10px; box-sizing: border-box; }
+body.edge-bottom #stage { align-items: flex-end; justify-content: center; }
+body.edge-left   #stage { align-items: center; justify-content: flex-start; padding: 0 0 0 4px; }
+body.edge-right  #stage { align-items: center; justify-content: flex-end; padding: 0 4px 0 0; }
+
+#pill {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 34px; min-width: 34px; padding: 0 12px; box-sizing: border-box;
+  border-radius: 17px; background: var(--glass); border: 1px solid var(--edge);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 6px 22px rgba(8, 10, 24, 0.35);
+  transition: width .22s var(--ease), height .22s var(--ease), padding .22s var(--ease),
+              background .15s, border-color .15s, opacity .2s, transform .2s var(--ease);
+  cursor: default;
+}
+#pill > * { display: none; }
+
+/* rest: a slim handle */
+#pill.rest { height: 8px; width: 44px; padding: 0; opacity: .6; border-color: rgba(255,255,255,.35); box-shadow: none; }
+#pill.rest:hover { opacity: 1; }
+
+/* ready (hovered) */
+#pill.ready { width: 132px; background: var(--glass-hi); border-color: var(--edge-hi); cursor: pointer; }
+#pill.ready .mic, #pill.ready .label { display: inline-flex; }
+
+/* listening */
+#pill.listening .dot, #pill.listening .wave { display: inline-flex; }
+#pill.listening.ptt { width: 132px; }
+#pill.listening.handsfree { width: 196px; padding: 0 5px; justify-content: space-between; }
+#pill.listening.handsfree .round { display: inline-flex; }
+
+/* processing */
+#pill.processing { width: 132px; }
+#pill.processing .dots, #pill.processing .label { display: inline-flex; }
+
+/* notices */
+#pill.notice, #pill.error { width: auto; max-width: 270px; padding: 0 14px; }
+#pill.notice .label, #pill.error .label { display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pill.error { border-color: rgba(255, 90, 80, .8); }
+
+#pill.dragging { transform: scale(1.06); cursor: grabbing; }
+#pill.hidden { opacity: 0; pointer-events: none; }
+
+.label { color: rgba(244,245,251,.82); letter-spacing: .1px; }
+.label b { color: #fff; font-weight: 700; }
+
+.mic svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--rec);
+  box-shadow: 0 0 0 0 rgba(255,75,62,.6); animation: pulse 1.4s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,75,62,.55); } 70% { box-shadow: 0 0 0 7px rgba(255,75,62,0); } 100% { box-shadow: 0 0 0 0 rgba(255,75,62,0); } }
+
+.wave { align-items: center; gap: 3px; height: 18px; }
+.wave i { display: block; width: 3px; height: 3px; border-radius: 2px; background: #fff; opacity: .9;
+  transition: height .08s linear; }
+#pill.handsfree .wave i { background: var(--accent); }
+
+.round { width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.12); cursor: pointer; transition: background .12s; }
+.round:hover { background: rgba(255,255,255,.24); }
+.round svg { width: 12px; height: 12px; }
+.cancel svg { stroke: #fff; stroke-width: 2; stroke-linecap: round; fill: none; }
+.stop svg { fill: var(--rec); }
+
+.dots { gap: 4px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: hop 1s infinite var(--ease); }
+.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes hop { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const { app, BrowserWindow, ipcMain, session, systemPreferences, clipboard, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, systemPreferences, clipboard, desktopCapturer, shell } = require('electron');
 const { Config } = require('./config');
 const { AudioDucker } = require('./audio/audioDucker');
 const { Permissions } = require('./permissions');
@@ -14,6 +14,7 @@ const { createInserter } = require('./dictation/insert');
 const { createVocab } = require('./dictation/vocab');
 const { ClaudeAI, MODELS, STYLES } = require('./ai/claude');
 const { readSelection } = require('./ai/selection');
+const { Meetings } = require('./meetings');
 const input = require('input-control');
 
 app.setName('RoyFlow');
@@ -23,7 +24,7 @@ if (process.env.DICTATION_SELFTEST) {
 }
 const log = console;
 const ctx = { devices: [] }; // shared bits the tray/settings read
-let config, ducker, permissions, store, vocab, ai, updater, trayUi, overlay, whisper, dictation, settingsWin, jabra = null;
+let config, ducker, permissions, store, vocab, ai, meetings, updater, trayUi, overlay, whisper, dictation, settingsWin, jabra = null;
 
 // ---------- helpers ----------
 function broadcast(channel, payload) {
@@ -132,6 +133,8 @@ function registerIpc() {
     if (name === 'start') return dictation.start('handsfree');
     if (name === 'stop') return dictation.finish();
     if (name === 'cancel') return dictation.cancel();
+    if (name === 'meeting-stop') return meetings.stop();
+    if (name === 'meetings') return openSettings('meetings');
   });
   listen('pill:hover', (on) => overlay.setInteractive(on));
   listen('pill:drag', (d) => overlay.drag(d));
@@ -155,6 +158,19 @@ function registerIpc() {
   handle('ai:save-key', (k) => { if (!/^sk-ant-/.test(String(k).trim())) throw new Error('That doesn’t look like an Anthropic API key'); ai.saveKey(k); return true; });
   handle('ai:clear-key', () => { ai.clearKey(); return true; });
   handle('ai:test', () => ai.test());
+
+  // meetings
+  handle('meetings:chunk', (chunk) => meetings.onChunk(chunk));
+  handle('meetings:status', () => meetings.status());
+  handle('meetings:start', (title) => meetings.start(title));
+  handle('meetings:stop', () => meetings.stop());
+  handle('meetings:list', () => meetings.list());
+  handle('meetings:get', (id) => meetings.get(Number(id)));
+  handle('meetings:rename', (id, t) => meetings.rename(Number(id), t));
+  handle('meetings:delete', (id) => meetings.delete(Number(id)));
+  handle('meetings:summarize', (id) => meetings.summarize(Number(id)));
+  handle('meetings:export', (id) => { const f = meetings.exportMarkdown(Number(id), app.getPath('downloads')); shell.showItemInFolder(f); return f; });
+  handle('meetings:copy', (text) => clipboard.writeText(String(text)));
 
   // dictionary + snippets
   const vocabChanged = () => { vocab.invalidate(); broadcast('ev:vocab', null); };
@@ -211,6 +227,19 @@ app.whenReady().then(async () => {
     readSelection: () => readSelection(input),
   });
 
+  meetings = new Meetings({
+    store, whisper, ai, config, log,
+    sendToPill: (op, opts = {}) => audioCmd(`meeting-${op}`, opts, 30000),
+  });
+  meetings.on('change', (st) => { overlay.win.webContents.send('ev:pill-meeting', st); broadcast('ev:meetings', st); trayUi?.render(); });
+  meetings.on('saved', (m) => broadcast('ev:meetings', m));
+  meetings.on('transcript', (m) => broadcast('ev:meetings', m));
+  // System audio for meeting notes: ScreenCaptureKit loopback, no picker.
+  session.defaultSession.setDisplayMediaRequestHandler(async (_req, cb) => {
+    const [screen] = await desktopCapturer.getSources({ types: ['screen'] });
+    cb(screen ? { video: screen, audio: 'loopback' } : {});
+  });
+
   // Polish whatever is selected in the focused app, in place.
   polishSelection = async (style = null) => {
     if (dictation.state !== 'idle') return;
@@ -249,6 +278,7 @@ app.whenReady().then(async () => {
     onPasteLast: () => dictation.lastTranscript && insert(dictation.lastTranscript),
     onCopyLast: () => dictation.lastTranscript && clipboard.writeText(dictation.lastTranscript),
     onPolishSelection: (style) => polishSelection(style),
+    meetings: () => meetings,
     aiReady: () => ai.configured(),
   });
 
@@ -295,6 +325,24 @@ async function selfTest() {
   }
   store.addTranscript('selftest', 'selftest');
   log.info('[selftest] db rows', store.recentTranscripts(1).length);
+
+  // Meeting pipeline with the pill's audio stubbed: two chunks, then stop.
+  if (wav && fs.existsSync(wav)) {
+    const pcm = new Int16Array(fs.readFileSync(wav).buffer.slice(44));
+    const realSend = meetings.sendToPill;
+    meetings.sendToPill = async (op) => {
+      if (op === 'stop') setTimeout(() => meetings.onChunk({ pcm: pcm.buffer.slice(0), seconds: pcm.length / 16000, final: true }), 50);
+      return { systemAudio: false };
+    };
+    const st = await meetings.start('Self-test meeting');
+    meetings.onChunk({ pcm: pcm.buffer.slice(0), seconds: pcm.length / 16000, final: false });
+    await meetings.stop();
+    await new Promise((r) => setTimeout(r, 200));
+    await meetings.whenIdle(30000);
+    const m = meetings.get(st.id);
+    log.info('[selftest] meeting', JSON.stringify({ title: m.title, ended: !!m.ended_at, transcript: m.transcript }));
+    meetings.sendToPill = realSend;
+  }
 
   // DICTATION_SELFTEST_SHOTS=dir: render each pill state and save PNGs.
   const shots = process.env.DICTATION_SELFTEST_SHOTS;
@@ -343,6 +391,11 @@ function pillNotice(notice, error = false) {
 }
 app.on('before-quit', (e) => {
   permissions?.closeGuide();
+  if (meetings?.active) {
+    // Save the meeting first: stop capture, then wait for the last chunk + summary.
+    e.preventDefault();
+    return meetings.stop().then(() => new Promise((r) => setTimeout(r, 500))).then(() => meetings.whenIdle(45000)).finally(() => app.quit());
+  }
   whisper?.stop();
   input.stop();
   if (quitting || dictation?.state !== 'listening') return;

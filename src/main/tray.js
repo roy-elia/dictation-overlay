@@ -27,7 +27,7 @@ function updateItem(updater) {
   }
 }
 
-function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady }) {
+function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady, meetings }) {
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
@@ -68,6 +68,19 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     ];
   }
 
+  function meetingItems() {
+    const m = meetings?.();
+    if (!m) return [];
+    const st = m.status();
+    const mins = st.active ? Math.floor((Date.now() - st.startedAt) / 60000) : 0;
+    return [
+      st.active
+        ? { label: `Stop Meeting Notes (${mins} min)`, click: () => m.stop() }
+        : { label: 'Start Meeting Notes', click: () => m.start().catch((e) => console.warn('[meeting]', e.message)) },
+      { label: 'Meetings…', click: () => onSettings('meetings') },
+    ];
+  }
+
   function dictationItems() {
     const { state } = dictation;
     const last = dictation.lastTranscript;
@@ -94,6 +107,8 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
       ...dictationItems(),
       { type: 'separator' },
       ...aiItems(),
+      { type: 'separator' },
+      ...meetingItems(),
       { type: 'separator' },
       { label: 'Microphone', submenu: micMenu() },
       { label: 'Languages', submenu: languageMenu() },

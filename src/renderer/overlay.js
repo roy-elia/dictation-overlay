@@ -10,6 +10,7 @@ const bars = [...wave.children];
 
 let model = { state: 'idle', mode: null };
 let hovering = false, noticeTimer = null, notice = null;
+let meeting = { active: false };
 
 function render() {
   const { state, mode } = model;
@@ -17,14 +18,20 @@ function render() {
   if (notice) cls = notice.error ? 'error' : 'notice';
   else if (state === 'listening') cls = `listening ${mode}`;
   else if (state === 'processing') cls = 'processing';
+  else if (meeting.active) cls = 'meeting';
   else if (hovering) cls = 'ready';
   pill.className = cls + (dragging ? ' dragging' : '');
 
   if (notice) label.textContent = notice.text;
   else if (state === 'processing') label.textContent = { polish: 'Polishing', command: 'Applying' }[model.stage] || 'Transcribing';
+  else if (cls === 'meeting') label.textContent = `Notes ${clock(Date.now() - meeting.startedAt)}`;
   else if (cls === 'ready') label.innerHTML = 'Hold <b>fn</b> to talk';
   else label.textContent = '';
 }
+
+const clock = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s2 = t % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : m) + ':' + String(s2).padStart(2, '0'); };
+api.on('ev:pill-meeting', (m) => { meeting = m; render(); });
+setInterval(() => { if (meeting.active && model.state === 'idle' && !notice) render(); }, 1000);
 
 function showNotice(text, error = false) {
   clearTimeout(noticeTimer);
@@ -51,12 +58,17 @@ api.onPillEdge((edge) => { document.body.className = `edge-${edge}`; });
 api.onSound((name) => window.rfAudio.play(name));
 
 // ---- audio commands from main ----
-api.onAudioCommand(async ({ id, op, deviceId }) => {
+api.onAudioCommand(async ({ id, op, deviceId, ...opts }) => {
   try {
     if (op === 'start') { await window.rfAudio.start(deviceId); return api.audioResult(id, { ok: true }); }
     if (op === 'stop') return api.audioResult(id, { ok: true, clip: await window.rfAudio.stop() });
     if (op === 'cancel') { await window.rfAudio.cancel(); return api.audioResult(id, { ok: true }); }
     if (op === 'devices') return api.audioResult(id, { ok: true, devices: await window.rfAudio.listDevices() });
+    if (op === 'meeting-start') {
+      const r = await window.rfMeeting.start(opts, (chunk) => api.call('meetings:chunk', chunk));
+      return api.audioResult(id, { ok: true, ...r });
+    }
+    if (op === 'meeting-stop') { await window.rfMeeting.stop(true); return api.audioResult(id, { ok: true }); }
   } catch (e) {
     api.audioResult(id, { ok: false, error: e.message });
   }
@@ -94,6 +106,7 @@ window.addEventListener('mouseup', (e) => {
     return render();
   }
   if (d.target) return api.pillAction(d.target.dataset.action);
+  if (meeting.active && model.state === 'idle') return api.pillAction('meetings');
   if (model.state === 'idle') api.pillAction('start');
   else if (model.state === 'listening') api.pillAction('stop');
 });

@@ -23,6 +23,9 @@ const DEFAULT_SETTINGS = {
   aiCustomInstructions: '',
   aiModel: 'claude-opus-5-5',
   aiEffort: 'low',
+  // meetings
+  meetingSystemAudio: true,   // also record other participants (needs Screen Recording)
+  meetingAutoSummary: true,   // summarize with Claude when a meeting ends
   // pill
   hidePill: false,
   pillEdge: 'bottom',         // bottom | left | right

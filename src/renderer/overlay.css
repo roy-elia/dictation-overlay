@@ -84,3 +84,10 @@ body.edge-right  #stage { align-items: center; justify-content: flex-end; paddin
 @keyframes hop { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* meeting notes running (shown while not dictating) */
+#pill.meeting { width: auto; padding: 0 5px 0 12px; border: 1.5px solid rgba(79, 209, 139, .85); }
+#pill.meeting .dot, #pill.meeting .label, #pill.meeting .mstop { display: inline-flex; }
+#pill.meeting .dot { background: #4fd18b; animation: none; box-shadow: 0 0 0 3px rgba(79,209,139,.18); }
+#pill.meeting .label { font-variant-numeric: tabular-nums; }
+.mstop svg { fill: #4fd18b; }

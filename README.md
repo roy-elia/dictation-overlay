@@ -24,6 +24,17 @@ DICTATION_SELFTEST=1 npm start   # runs the permission check, mute/restore and a
 
 To use Jabra, run `JABRA_PARTNER_KEY=... npm start` and turn on both the setting and the flag. To use a different on-head property, set `JABRA_ONHEAD_PROPERTY`.
 
+## Menu bar
+
+RoyFlow has no Dock icon. Its microphone icon in the menu bar has these items:
+- Start or Stop Dictation
+- Show Dictation Pill
+- Permissions…
+- the update state: Check for Updates, Downloading…, or **Restart to Install x.y.z**
+- **Quit RoyFlow**
+
+Quitting normally (including with `kill`, since SIGTERM and SIGINT go through `app.quit()`) restores your audio and lets Squirrel.Mac install an update that has already downloaded. To regenerate the icon, run `swift scripts/make-tray-icon.swift "$PWD"`.
+
 ## Packaging, signing and updates
 
 ```bash

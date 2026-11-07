@@ -8,10 +8,11 @@ const { Permissions } = require('./permissions');
 const { JabraOnHead } = require('./jabra');
 const { startUpdater, openDatabase } = require('./infra');
 const { preventActivation } = require('panel-activation');
+const { createTray } = require('./tray');
 
 const log = console;
 let overlay = null;
-let config, ducker, permissions, store, jabra = null;
+let config, ducker, permissions, store, updater, trayUi, jabra = null;
 const state = { recording: false };
 
 // ---------- overlay window ----------
@@ -59,6 +60,7 @@ async function startDictation() {
   if (state.recording) return state;
   state.recording = true;
   broadcast(IPC.EV_DICTATION_STATE, state);
+  trayUi?.render();
   if (config.setting('muteAudioWhileDictating')) await ducker.duck().catch((e) => log.warn(e));
   return state;
 }
@@ -67,6 +69,7 @@ async function stopDictation() {
   if (!state.recording) return state;
   state.recording = false;
   broadcast(IPC.EV_DICTATION_STATE, state);
+  trayUi?.render();
   await ducker.restore().catch((e) => log.warn(e));
   return state;
 }
@@ -124,7 +127,14 @@ app.whenReady().then(async () => {
 
   registerIpc();
   createOverlay();
-  startUpdater(log);
+  updater = startUpdater(log);
+  trayUi = createTray({
+    state,
+    overlay: () => overlay,
+    updater,
+    onToggleDictation: () => (state.recording ? stopDictation() : startDictation()),
+    onPermissions: () => permissions.walkThrough().catch((e) => log.warn('[permissions]', e.message)),
+  });
 
   permissions.on('granted', (p) => broadcast(IPC.EV_PERMISSIONS, { granted: p, all: permissions.last }));
   permissions.on('relaunch-required', () => { app.relaunch(); app.exit(0); });
@@ -154,6 +164,10 @@ async function selfTest() {
   log.info('[selftest] db rows', store.recentTranscripts(1).length);
   app.quit();
 }
+
+// `kill`/launchd stop the app with SIGTERM; route it through a normal quit so
+// audio is restored and Squirrel.Mac can install a downloaded update.
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => app.quit());
 
 let quitting = false;
 app.on('before-quit', (e) => {

@@ -3,15 +3,35 @@
 const path = require('path');
 const { app } = require('electron');
 
+// Returns an EventEmitter with a small status model the tray menu renders:
+//   status: 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error' | 'disabled'
+// The update is applied on the next normal quit (Squirrel.Mac's ShipIt runs
+// when the app terminates), or immediately via installNow().
 function startUpdater(log = console) {
-  if (!app.isPackaged) return null;
+  const { EventEmitter } = require('events');
+  const ev = new EventEmitter();
+  ev.status = 'disabled';
+  ev.version = null;
+  ev.check = () => {};
+  ev.installNow = () => {};
+  if (!app.isPackaged) return ev;
+
   const { autoUpdater } = require('electron-updater');
+  const set = (status, version = ev.version) => { ev.status = status; ev.version = version; ev.emit('change'); };
   autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('error', (e) => log.warn('[updater]', e.message));
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000);
-  return autoUpdater;
+  autoUpdater.on('checking-for-update', () => set('checking'));
+  autoUpdater.on('update-available', (i) => set('downloading', i.version));
+  autoUpdater.on('update-not-available', () => set('up-to-date', null));
+  autoUpdater.on('update-downloaded', (i) => set('ready', i.version));
+  autoUpdater.on('error', (e) => { log.warn('[updater]', e.message); set('error'); });
+
+  ev.check = () => autoUpdater.checkForUpdates().catch(() => {});
+  ev.installNow = () => { if (ev.status === 'ready') autoUpdater.quitAndInstall(); };
+  ev.check();
+  setInterval(ev.check, 6 * 60 * 60 * 1000);
+  return ev;
 }
 
 function openDatabase() {

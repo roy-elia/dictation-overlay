@@ -4,6 +4,23 @@
   const { TABS, h, header, row, select, set, fmtDate, render } = window.rfSettings;
   let term = '';
 
+  // Word-level diff (LCS) for polish/command entries: original -> result.
+  function diff(a, b) {
+    const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+    if (A.length * B.length > 250000) return h('div', {}, b);
+    const dp = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1));
+    for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const out = h('div', { class: 'diff', style: 'white-space:pre-wrap' });
+    let i = 0, j = 0;
+    while (i < A.length || j < B.length) {
+      if (i < A.length && j < B.length && A[i] === B[j]) { out.append(A[i]); i++; j++; }
+      else if (j < B.length && (i >= A.length || dp[i][j + 1] >= dp[i + 1][j])) { out.append(h('ins', {}, B[j])); j++; }
+      else { out.append(h('del', {}, A[i])); i++; }
+    }
+    return out;
+  }
+
   TABS.history = async () => {
     const S = window.rfSettings.S;
     const [stats, items] = await Promise.all([rf.call('history:stats'), rf.call('history:list', term)]);
@@ -16,8 +33,9 @@
 
     const list = shown.length
       ? shown.map((t) => h('div', { class: 'item' },
-        h('div', {}, h('div', { style: 'white-space:pre-wrap' }, t.text),
-          h('div', { class: 'meta' }, fmtDate(t.created_at), t.kind === 'polish' ? ' · polished' : '', t.seconds ? ` · ${t.seconds.toFixed(1)} s` : '')),
+        h('div', {}, t.kind === 'polish' && t.raw ? diff(t.raw, t.text) : h('div', { style: 'white-space:pre-wrap' }, t.text),
+          t.kind === 'command' && t.raw ? h('div', { class: 'meta' }, `You said: “${t.raw}”`) : null,
+          h('div', { class: 'meta' }, fmtDate(t.created_at), { polish: ' · polished', command: ' · voice command' }[t.kind] || '', t.seconds ? ` · ${t.seconds.toFixed(1)} s` : '')),
         h('div', { class: 'actions' },
           h('button', { onclick: () => rf.call('history:copy', t.text) }, 'Copy'),
           h('button', { class: 'danger', onclick: async () => { await rf.call('history:delete', t.id); render(); } }, 'Delete'))))

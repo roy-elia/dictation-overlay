@@ -21,7 +21,7 @@ function render() {
   pill.className = cls + (dragging ? ' dragging' : '');
 
   if (notice) label.textContent = notice.text;
-  else if (state === 'processing') label.textContent = 'Transcribing';
+  else if (state === 'processing') label.textContent = { polish: 'Polishing', command: 'Applying' }[model.stage] || 'Transcribing';
   else if (cls === 'ready') label.innerHTML = 'Hold <b>fn</b> to talk';
   else label.textContent = '';
 }

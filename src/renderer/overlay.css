@@ -39,12 +39,15 @@ body.edge-right  #stage { align-items: center; justify-content: flex-end; paddin
 
 /* listening */
 #pill.listening .dot, #pill.listening .wave { display: inline-flex; }
-#pill.listening.ptt { width: 132px; }
+#pill.listening.ptt, #pill.listening.command { width: 132px; }
+#pill.listening.command { border-color: rgba(255, 196, 92, .7); }
+#pill.listening.command .wave i { background: #ffc45c; }
 #pill.listening.handsfree { width: 196px; padding: 0 5px; justify-content: space-between; }
 #pill.listening.handsfree .round { display: inline-flex; }
 
 /* processing */
 #pill.processing { width: 132px; }
+#pill.processing:has(.label:not(:empty)) { width: auto; min-width: 132px; }
 #pill.processing .dots, #pill.processing .label { display: inline-flex; }
 
 /* notices */

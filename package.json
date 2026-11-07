@@ -17,6 +17,7 @@
     "build:whisper": "bash scripts/build-whisper.sh"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "audio-control": "file:./native/audio_control",
     "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.3.9",

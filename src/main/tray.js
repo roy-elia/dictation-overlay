@@ -27,7 +27,7 @@ function updateItem(updater) {
   }
 }
 
-function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast }) {
+function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady }) {
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
@@ -57,6 +57,17 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     ];
   }
 
+  function aiItems() {
+    const ready = aiReady();
+    const styles = [['cleanup', 'Clean Up'], ['polished', 'Polished'], ['formal', 'Formal'], ['casual', 'Casual'], ['concise', 'Concise']];
+    return [
+      { label: 'Polish Selected Text', enabled: ready && dictation.state === 'idle', click: () => onPolishSelection(null) },
+      { label: 'Rewrite Selected Text As', enabled: ready, submenu: styles.map(([k, l]) => ({ label: l, click: () => onPolishSelection(k) })) },
+      { label: 'Polish Every Dictation', type: 'checkbox', enabled: ready, checked: !!config.setting('aiAutoPolish'), click: (i) => set('aiAutoPolish', i.checked) },
+      ...(ready ? [] : [{ label: 'Set Up AI Polish…', click: () => onSettings('ai') }]),
+    ];
+  }
+
   function dictationItems() {
     const { state } = dictation;
     const last = dictation.lastTranscript;
@@ -81,6 +92,8 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
       { label: `${words.toLocaleString()} words dictated`, click: () => onSettings('history') },
       { type: 'separator' },
       ...dictationItems(),
+      { type: 'separator' },
+      ...aiItems(),
       { type: 'separator' },
       { label: 'Microphone', submenu: micMenu() },
       { label: 'Languages', submenu: languageMenu() },
@@ -111,6 +124,8 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
   function pillMenu() {
     return Menu.buildFromTemplate([
       ...dictationItems(),
+      { type: 'separator' },
+      ...aiItems(),
       { type: 'separator' },
       { label: 'Microphone', submenu: micMenu() },
       { label: 'Languages', submenu: languageMenu() },

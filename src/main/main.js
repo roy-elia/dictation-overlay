@@ -12,6 +12,8 @@ const { WhisperServer } = require('./speech/whisper');
 const { DictationController } = require('./dictation/controller');
 const { createInserter } = require('./dictation/insert');
 const { createVocab } = require('./dictation/vocab');
+const { ClaudeAI, MODELS, STYLES } = require('./ai/claude');
+const { readSelection } = require('./ai/selection');
 const input = require('input-control');
 
 app.setName('RoyFlow');
@@ -21,7 +23,7 @@ if (process.env.DICTATION_SELFTEST) {
 }
 const log = console;
 const ctx = { devices: [] }; // shared bits the tray/settings read
-let config, ducker, permissions, store, vocab, updater, trayUi, overlay, whisper, dictation, settingsWin, jabra = null;
+let config, ducker, permissions, store, vocab, ai, updater, trayUi, overlay, whisper, dictation, settingsWin, jabra = null;
 
 // ---------- helpers ----------
 function broadcast(channel, payload) {
@@ -148,6 +150,12 @@ function registerIpc() {
   handle('history:clear', () => store.clearTranscripts());
   handle('history:copy', (text) => clipboard.writeText(String(text)));
 
+  // AI
+  handle('ai:status', () => ({ configured: ai.configured(), savedKey: ai.hasSavedKey(), envKey: !!process.env.ANTHROPIC_API_KEY, models: MODELS, styles: Object.keys(STYLES) }));
+  handle('ai:save-key', (k) => { if (!/^sk-ant-/.test(String(k).trim())) throw new Error('That doesn’t look like an Anthropic API key'); ai.saveKey(k); return true; });
+  handle('ai:clear-key', () => { ai.clearKey(); return true; });
+  handle('ai:test', () => ai.test());
+
   // dictionary + snippets
   const vocabChanged = () => { vocab.invalidate(); broadcast('ev:vocab', null); };
   handle('vocab:list', () => ({ words: store.words(), snippets: store.snippets() }));
@@ -185,6 +193,7 @@ app.whenReady().then(async () => {
   permissions = new Permissions();
   store = openDatabase();
   vocab = createVocab({ store, config });
+  ai = new ClaudeAI({ config, log });
   ctx.stats = () => store.stats();
   whisper = new WhisperServer({ log });
   applyRetention();
@@ -197,15 +206,35 @@ app.whenReady().then(async () => {
 
   overlay = createOverlay({ config, log });
   const insert = createInserter(input, log);
-  dictation = new DictationController({ audio, whisper, insert, ducker, config, input, vocab, log });
+  dictation = new DictationController({
+    audio, whisper, insert, ducker, config, input, vocab, ai, log,
+    readSelection: () => readSelection(input),
+  });
+
+  // Polish whatever is selected in the focused app, in place.
+  polishSelection = async (style = null) => {
+    if (dictation.state !== 'idle') return;
+    if (!ai.configured()) return pillNotice('Add a Claude API key in Settings › AI', true);
+    const sel = await readSelection(input);
+    if (!sel.trim()) return pillNotice('Select some text first');
+    overlay.win.webContents.send('ev:pill-state', { state: 'processing', stage: 'polish' });
+    try {
+      const out = await ai.polish(sel, style);
+      await insert(out);
+      if (config.setting('historyRetention') !== 'never') store.addTranscript(out, null, { raw: sel, kind: 'polish' });
+      overlay.win.webContents.send('ev:pill-state', { state: 'idle' });
+    } catch (e) {
+      pillNotice(e.message, true);
+    }
+  };
 
   dictation.on('state', (s) => { overlay.win.webContents.send('ev:pill-state', s); trayUi?.render(); });
   dictation.on('sound', (name) => { if (config.setting('soundsEnabled')) overlay.win.webContents.send('ev:sound', name); });
   dictation.on('pasteLast', () => dictation.lastTranscript && insert(dictation.lastTranscript));
   dictation.on('copyLast', () => dictation.lastTranscript && clipboard.writeText(dictation.lastTranscript));
   dictation.on('pressEnter', () => setTimeout(() => input.pressKey('return'), 120));
-  dictation.on('transcript', ({ text, raw, seconds }) => {
-    if (config.setting('historyRetention') !== 'never') store.addTranscript(text, null, { raw, seconds });
+  dictation.on('transcript', ({ text, raw, seconds, kind }) => {
+    if (config.setting('historyRetention') !== 'never') store.addTranscript(text, null, { raw, seconds, kind });
     else store.addTranscript('', null, { seconds, words: (text.match(/\S+/g) || []).length }); // stats only, no text
     broadcast('ev:transcript', { text, seconds });
     trayUi?.render();
@@ -219,6 +248,8 @@ app.whenReady().then(async () => {
     onPermissions: () => permissions.walkThrough(['accessibility']).catch((e) => log.warn('[permissions]', e.message)),
     onPasteLast: () => dictation.lastTranscript && insert(dictation.lastTranscript),
     onCopyLast: () => dictation.lastTranscript && clipboard.writeText(dictation.lastTranscript),
+    onPolishSelection: (style) => polishSelection(style),
+    aiReady: () => ai.configured(),
   });
 
   // Hotkeys need Accessibility; walk the user there if missing, start once granted.
@@ -305,6 +336,11 @@ async function selfTest() {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => app.quit());
 
 let quitting = false;
+let polishSelection = async () => {};
+function pillNotice(notice, error = false) {
+  overlay?.win.webContents.send('ev:pill-state', { state: error ? 'error' : 'idle', notice });
+  if (error) setTimeout(() => overlay?.win.webContents.send('ev:pill-state', { state: 'idle' }), 2600);
+}
 app.on('before-quit', (e) => {
   permissions?.closeGuide();
   whisper?.stop();

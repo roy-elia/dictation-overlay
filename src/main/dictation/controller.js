@@ -27,6 +27,8 @@ class DictationController extends EventEmitter {
    * @param {object} d.config
    * @param {{setRecording(b:boolean):void}} d.input
    * @param {{prompt():string, apply(text:string):{text:string, pressEnter:boolean}}} [d.vocab]
+   * @param {{configured():boolean, polish(t:string):Promise<string>, command(i:string, sel:string):Promise<string>}} [d.ai]
+   * @param {() => Promise<string>} [d.readSelection]
    */
   constructor(d) {
     super();
@@ -49,7 +51,7 @@ class DictationController extends EventEmitter {
 
   // ---- input events from the native tap / pill / menu ----
   onInput(ev) {
-    if (ev.type === 'fn' && ev.down) return this._fnDown();
+    if (ev.type === 'fn' && ev.down) return this._fnDown(ev.command);
     if (ev.type === 'fn' && !ev.down) return this._fnUp();
     if (ev.type === 'fnChord') {
       if (this.state === 'listening' && this.mode === 'ptt' && Date.now() - this.pressedAt < 600) this.cancel(true);
@@ -68,16 +70,17 @@ class DictationController extends EventEmitter {
     }
   }
 
-  _fnDown() {
+  _fnDown(command = false) {
     if (this.state === 'listening' && this.mode === 'handsfree') return this.finish();
     if (this.state !== 'idle') return;
-    const doubleTap = Date.now() - this.lastTapAt < DOUBLE_TAP_MS;
     this.pressedAt = Date.now();
+    if (command) return this.start('command');
+    const doubleTap = Date.now() - this.lastTapAt < DOUBLE_TAP_MS;
     this.start(doubleTap ? 'handsfree' : 'ptt');
   }
 
   _fnUp() {
-    if (this.state !== 'listening' || this.mode !== 'ptt') return;
+    if (this.state !== 'listening' || (this.mode !== 'ptt' && this.mode !== 'command')) return;
     if (Date.now() - this.pressedAt < TAP_MS) {
       this.lastTapAt = Date.now();
       return this.cancel(true);
@@ -88,8 +91,14 @@ class DictationController extends EventEmitter {
   // ---- actions ----
   async start(mode) {
     if (this.state !== 'idle') return;
+    if (mode === 'command' && !this.ai?.configured()) {
+      return this._fail('Add a Claude API key in Settings › AI to use voice commands');
+    }
     this.mode = mode;
     this.pressedAt = this.pressedAt || Date.now();
+    this.selection = '';
+    // Command mode grabs the selection first, while it is surely still selected.
+    if (mode === 'command') this.selectionP = this.readSelection().catch(() => '');
     this._set('listening');
     this.emit('sound', 'start');
     if (mode === 'handsfree') this._armMax();
@@ -131,14 +140,29 @@ class DictationController extends EventEmitter {
         language: this._language(),
         prompt: this.vocab?.prompt() || '',
       });
-      const { text, pressEnter } = this.vocab ? this.vocab.apply(raw) : { text: raw, pressEnter: false };
+      const applied = this.vocab ? this.vocab.apply(raw) : { text: raw, pressEnter: false };
+      let { text } = applied;
+      const { pressEnter } = applied;
       this.log.info(`[dictation] ${clip.seconds.toFixed(1)}s audio -> ${Date.now() - t0}ms`);
       if (!text) return this._set('idle', { notice: 'No speech heard' });
+
+      let kind = 'dictation', notice = null;
+      if (this.mode === 'command') {
+        const selection = await this.selectionP;
+        this._set('processing', { stage: 'command' });
+        text = await this.ai.command(text, selection);
+        kind = 'command';
+      } else if (this.config.setting('aiAutoPolish') && this.ai?.configured()) {
+        this._set('processing', { stage: 'polish' });
+        try { text = await this.ai.polish(text); kind = 'polish'; }
+        catch (e) { notice = `Pasted unpolished: ${e.message}`; }
+      }
+
       this.lastTranscript = text;
       await this.insert(text);
       if (pressEnter) this.emit('pressEnter');
-      this.emit('transcript', { text, raw, seconds: clip.seconds });
-      this._set('idle');
+      this.emit('transcript', { text, raw, seconds: clip.seconds, kind });
+      this._set('idle', notice ? { notice } : {});
     } catch (e) {
       this._fail(e.message);
     }

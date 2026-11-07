@@ -1,7 +1,7 @@
 // input_control.node — global dictation hotkeys + synthetic key presses.
 //
 //   start(cb)                cb({type, ...}) on the JS thread. Events:
-//                              {type:'fn', down:bool}          fn/🌐 pressed or released alone
+//                              {type:'fn', down:bool, command:bool}  fn/🌐 alone, or ⌃ then fn (command)
 //                              {type:'fnChord'}                 another key pressed while fn held
 //                              {type:'hotkey', name:'handsFree'|'cancel'|'pasteLast'|'copyLast'}
 //   stop()
@@ -24,7 +24,7 @@
 
 namespace {
 
-struct Event { std::string type; std::string name; bool down = false; };
+struct Event { std::string type; std::string name; bool down = false; bool command = false; };
 
 CFMachPortRef gTap = nullptr;
 CFRunLoopSourceRef gSource = nullptr;
@@ -34,6 +34,7 @@ bool gHasTsfn = false;
 std::atomic<bool> gRecording{false};
 bool gFnDown = false;
 bool gFnChorded = false;
+bool gFnCommand = false;  // ⌃ held when fn went down = voice command mode
 int gSwallowKeyUp = -1;  // keycode whose keyUp we must also swallow
 
 void Emit(Event ev) {
@@ -43,7 +44,7 @@ void Emit(Event ev) {
     Napi::Object o = Napi::Object::New(env);
     o.Set("type", e->type);
     if (!e->name.empty()) o.Set("name", e->name);
-    if (e->type == "fn") o.Set("down", e->down);
+    if (e->type == "fn") { o.Set("down", e->down); o.Set("command", e->command); }
     cb.Call({o});
     delete e;
   });
@@ -66,10 +67,12 @@ CGEventRef TapCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void
     if (down != gFnDown) {
       gFnDown = down;
       if (down) {
-        gFnChorded = (flags & kMods) != 0;  // fn+⌘ etc. is not a dictation press
-        if (!gFnChorded) Emit({"fn", "", true});
+        const CGEventFlags mods = flags & kMods;
+        gFnCommand = mods == kCGEventFlagMaskControl;   // ⌃ then fn = command mode
+        gFnChorded = mods != 0 && !gFnCommand;           // fn+⌘ etc. is not a dictation press
+        if (!gFnChorded) Emit({"fn", "", true, gFnCommand});
       } else if (!gFnChorded) {
-        Emit({"fn", "", false});
+        Emit({"fn", "", false, gFnCommand});
       }
     }
     return event;

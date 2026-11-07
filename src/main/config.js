@@ -17,6 +17,12 @@ const DEFAULT_SETTINGS = {
   languages: [],              // [] = auto-detect; one code = force it; several = auto among them
   whisperModel: 'ggml-large-v3-turbo-q5_0.bin',
   pressEnterCommand: false,   // "press enter" at the end of a dictation sends Return
+  // AI (Claude, user's own key)
+  aiAutoPolish: false,        // polish every dictation before pasting
+  aiStyle: 'cleanup',         // cleanup | polished | formal | casual | concise | custom
+  aiCustomInstructions: '',
+  aiModel: 'claude-opus-5-5',
+  aiEffort: 'low',
   // pill
   hidePill: false,
   pillEdge: 'bottom',         // bottom | left | right

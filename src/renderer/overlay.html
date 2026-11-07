@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <style>
+    html, body { margin: 0; background: transparent; font: 13px -apple-system, system-ui; user-select: none; }
+    #pill {
+      height: 40px; margin: 8px; border-radius: 20px; display: flex; align-items: center; gap: 8px;
+      padding: 0 14px; color: #fff; background: rgba(20,20,22,.82); backdrop-filter: blur(20px);
+      cursor: default;
+    }
+    #dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
+    #pill.rec #dot { background: #ff453a; }
+    #head { margin-left: auto; opacity: .7; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="pill" role="button" aria-label="Toggle dictation">
+    <span id="dot"></span><span id="label">Click to dictate</span><span id="head"></span>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

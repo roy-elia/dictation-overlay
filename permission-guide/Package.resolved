@@ -1,0 +1,15 @@
+{
+  "originHash" : "b3ad1bab65998398bdfa1b486e666f1d66267356621157cb2d04f3af928995c5",
+  "pins" : [
+    {
+      "identity" : "permiso",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/zats/permiso.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "77afe0eb5251d6da8756aac1b24e3c01c1433f87"
+      }
+    }
+  ],
+  "version" : 3
+}

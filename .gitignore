@@ -1,0 +1,12 @@
+node_modules/
+dist/
+vendor/
+native/*/build/
+native/*/bin/
+native/*/node_modules/
+permission-guide/.build/
+permission-guide/build/
+build/icon.iconset/
+.DS_Store
+*.log
+.env*

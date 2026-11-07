@@ -1,0 +1,105 @@
+{
+  "name": "dictation-overlay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal voice dictation + accessibility overlay for macOS (Electron)",
+  "main": "src/main/main.js",
+  "license": "UNLICENSED",
+  "scripts": {
+    "postinstall": "electron-rebuild -f -w panel-activation,audio-control,better-sqlite3",
+    "build:native": "electron-rebuild -f -w panel-activation,audio-control",
+    "build:mediaremote": "bash scripts/build-mediaremote.sh",
+    "build:guide": "bash scripts/build-guide.sh",
+    "build:all": "npm run build:native && npm run build:mediaremote && npm run build:guide",
+    "start": "electron .",
+    "dist": "npm run build:all && electron-builder --mac --publish never; npm run build:native",
+    "release": "npm run build:all && electron-builder --mac --publish always; npm run build:native"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "electron-updater": "^6.3.9",
+    "audio-control": "file:./native/audio_control",
+    "panel-activation": "file:./native/panel_activation"
+  },
+  "optionalDependencies": {
+    "@gnaudio/jabra-js": "4.4.4",
+    "@gnaudio/jabra-js-properties": "^1.2.2",
+    "@gnaudio/jabra-properties-definition": "^14.7.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^39.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.personal.dictation-overlay",
+    "productName": "Dictation Overlay",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Dictation needs the microphone.",
+        "NSAppleEventsUsageDescription": "Used to mute and restore system volume while dictating."
+      },
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "identity": null
+    },
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/mediaremote-adapter/bin/mediaremote-adapter.pl",
+        "to": "mediaremote/mediaremote-adapter.pl"
+      },
+      {
+        "from": "vendor/mediaremote-adapter/build/MediaRemoteAdapter.framework",
+        "to": "mediaremote/MediaRemoteAdapter.framework"
+      },
+      {
+        "from": "permission-guide/build/PermissionGuide.app",
+        "to": "PermissionGuide.app"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "roy-elia",
+        "repo": "dictation-overlay",
+        "releaseType": "release"
+      }
+    ],
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/node_modules/*/{test,tests,docs,example,examples}/**",
+      "!**/node_modules/better-sqlite3/{deps,src}/**",
+      "!**/node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*",
+      "!**/node_modules/*/build/Release/obj.target/**",
+      "!**/node_modules/@gnaudio/*/{browser-esm,browser-umd}/**",
+      "!**/*.{map,md,ts}",
+      "!**/node_modules/{panel-activation,audio-control}/{bin,src,node_modules}/**",
+      "!**/node_modules/{panel-activation,audio-control}/build/{Makefile,*.mk,*.gypi,gyp-mac-tool}"
+    ],
+    "afterSign": "./scripts/sign.js"
+  },
+  "author": "Roy Elia"
+}

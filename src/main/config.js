@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
   meetingAutoSummary: true,   // summarize with Claude when a meeting ends
   // pill
   hidePill: false,
-  pillEdge: 'bottom',         // bottom | left | right
+  pillEdge: 'left',           // left | right | bottom
   pillOffset: 0.5,            // 0..1 along that edge
   // history / privacy
   historyRetention: 'forever', // forever | 24h | never

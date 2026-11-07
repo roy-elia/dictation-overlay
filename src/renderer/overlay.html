@@ -5,27 +5,48 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' mediastream:" />
   <link rel="stylesheet" href="overlay.css" />
 </head>
-<body class="edge-bottom">
-  <div id="stage">
-    <div id="pill" class="rest" role="button" aria-label="RoyFlow dictation">
-      <button class="round cancel" data-action="cancel" aria-label="Cancel" title="Cancel (Esc)">
-        <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+<body class="edge-left">
+  <div id="dock">
+    <!-- The bubble: rest handle / mic / live dictation -->
+    <div id="bubble" class="rest" role="button" aria-label="Dictate" data-tip="Dictate <b>fn</b>">
+      <button class="mini cancel" data-action="cancel" aria-label="Cancel" data-tip="Cancel <b>esc</b>">
+        <svg viewBox="0 0 12 12"><path d="M3.5 3.5l5 5M8.5 3.5l-5 5"/></svg>
       </button>
       <span class="mic" aria-hidden="true">
-        <svg viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5"/></svg>
+        <svg viewBox="0 0 16 16"><rect x="5.6" y="1.6" width="4.8" height="8.2" rx="2.4"/><path d="M3.6 7.6a4.4 4.4 0 0 0 8.8 0M8 12.1v2.3"/></svg>
       </span>
-      <span class="dot" aria-hidden="true"></span>
       <span class="wave" aria-hidden="true"></span>
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="label"></span>
-      <button class="round mstop" data-action="meeting-stop" aria-label="Stop meeting notes" title="Stop meeting notes">
-        <svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1.2"/></svg>
-      </button>
-      <button class="round stop" data-action="stop" aria-label="Finish" title="Finish and paste">
-        <svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1.2"/></svg>
+      <span class="rec" aria-hidden="true"></span>
+      <button class="mini stop" data-action="stop" aria-label="Finish" data-tip="Finish and paste <b>fn</b>">
+        <svg viewBox="0 0 12 12"><rect x="3.5" y="3.5" width="5" height="5" rx="1"/></svg>
       </button>
     </div>
+
+    <!-- Toolbar: appears on hover -->
+    <div id="tools">
+      <div class="tool" id="t-meeting">
+        <button class="disc" data-action="meeting" aria-label="Meeting notes" data-tip="Start meeting notes">
+          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><circle class="fill" cx="8" cy="8" r="2.4"/></svg>
+        </button>
+      </div>
+      <div class="tool">
+        <button class="disc" data-action="history" aria-label="History" data-tip="History · paste last <b>⌘⌃V</b>">
+          <svg viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.4 2.6v2.6H5"/><path d="M8 5.2V8l2 1.3"/></svg>
+        </button>
+      </div>
+      <div class="tool split" id="t-polish">
+        <button class="disc" data-action="polish" aria-label="Polish selection" data-tip="Polish selection">
+          <svg viewBox="0 0 16 16"><path d="M3 13l7.2-7.2M9 4.6l2.4 2.4"/><path class="fill" d="M12.3 1.6l.45 1.15 1.15.45-1.15.45-.45 1.15-.45-1.15-1.15-.45 1.15-.45zM5.2 2.2l.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3zM13.4 8.6l.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3z"/></svg>
+        </button>
+        <button class="tab" data-action="polish-menu" aria-label="Polish styles" data-tip="Rewrite as…">
+          <svg viewBox="0 0 8 8"><path d="M3 1.8L5.2 4 3 6.2"/></svg>
+        </button>
+      </div>
+    </div>
   </div>
+  <div id="tip" role="tooltip"></div>
+
   <script src="audio.js"></script>
   <script src="meeting.js"></script>
   <script src="overlay.js"></script>

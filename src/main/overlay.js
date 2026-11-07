@@ -6,14 +6,15 @@ const path = require('path');
 const { BrowserWindow, screen } = require('electron');
 const { preventActivation } = require('panel-activation');
 
-const W = 300, H = 76;  // room for the widest state + hover hit-slop
-const MARGIN = 10;
+// Window size per edge: room for the bubble, the toolbar and side tooltips.
+const SIZE = { left: [340, 300], right: [340, 300], bottom: [460, 120] };
+const MARGIN = 0;
 
 function createOverlay({ config, log = console }) {
   const win = new BrowserWindow({
     title: 'RoyFlowPill',
     type: 'panel',
-    width: W, height: H,
+    width: SIZE.left[0], height: SIZE.left[1],
     frame: false, transparent: true, hasShadow: false, resizable: false, movable: false,
     alwaysOnTop: true, skipTaskbar: true, fullscreenable: false, focusable: false, show: false,
     webPreferences: {
@@ -31,6 +32,7 @@ function createOverlay({ config, log = console }) {
   function place(edge = config.setting('pillEdge'), offset = config.setting('pillOffset')) {
     const a = display();
     const o = Math.max(0, Math.min(1, offset));
+    const [W, H] = SIZE[edge] || SIZE.left;
     let x, y;
     if (edge === 'left') { x = a.x + MARGIN; y = a.y + o * (a.height - H); }
     else if (edge === 'right') { x = a.x + a.width - W - MARGIN; y = a.y + o * (a.height - H); }
@@ -56,13 +58,14 @@ function createOverlay({ config, log = console }) {
     if (phase === 'move') { win.setPosition(Math.round(x - grab.dx), Math.round(y - grab.dy)); return; }
     grab = null;
     const a = display(), b = win.getBounds();
-    const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    const p = screen.getCursorScreenPoint(); // where the bubble was dropped
+    const cx = p.x, cy = p.y;
     const dist = { left: cx - a.x, right: a.x + a.width - cx, bottom: a.y + a.height - cy };
     const edge = Object.entries(dist).sort((p, q) => p[1] - q[1])[0][0];
-    const offset = edge === 'bottom' ? (b.x - a.x) / (a.width - W) : (b.y - a.y) / (a.height - H);
-    config.set('settings', 'pillEdge', edge);
+    const [W, H] = SIZE[edge];
+    const offset = edge === 'bottom' ? (cx - W / 2 - a.x) / (a.width - W) : (cy - H / 2 - a.y) / (a.height - H);
     config.set('settings', 'pillOffset', Math.max(0, Math.min(1, offset)));
-    place(edge, offset);
+    config.set('settings', 'pillEdge', edge); // triggers place()
   }
 
   return {

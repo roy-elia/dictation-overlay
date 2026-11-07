@@ -134,7 +134,12 @@ function registerIpc() {
     if (name === 'stop') return dictation.finish();
     if (name === 'cancel') return dictation.cancel();
     if (name === 'meeting-stop') return meetings.stop();
+    if (name === 'meeting') return meetings.active ? meetings.stop() : meetings.start().catch((e) => pillNotice(e.message, true));
     if (name === 'meetings') return openSettings('meetings');
+    if (name === 'history') return openSettings('history');
+    if (name === 'polish') return polishSelection(null);
+    if (name === 'polish-menu') return trayUi.polishMenu().popup({ window: overlay.win });
+    if (name === 'menu') return trayUi.pillMenu().popup({ window: overlay.win });
   });
   listen('pill:hover', (on) => overlay.setInteractive(on));
   listen('pill:drag', (d) => overlay.drag(d));
@@ -306,6 +311,7 @@ app.whenReady().then(async () => {
     if (c.key === 'showInDock') syncDock();
     if (c.key === 'launchAtLogin') syncLoginItem();
     if (c.key === 'hidePill') overlay.setVisible(!c.value);
+    if (c.key === 'pillEdge' && !c.fromDrag) overlay.place();
     if (c.key === 'historyRetention') applyRetention();
     if (c.key === 'whisperModel') whisper.start(c.value).catch(() => {});
     trayUi.render();
@@ -365,10 +371,18 @@ async function selfTest() {
       await new Promise((r) => setTimeout(r, 450));
       fs.writeFileSync(path.join(shots, `pill-${name}.png`), (await wc.capturePage()).toPNG());
     }
-    await wc.executeJavaScript(`document.getElementById('pill').dispatchEvent(new MouseEvent('mouseenter'))`);
     wc.send('ev:pill-state', { state: 'idle' });
+    await new Promise((r) => setTimeout(r, 3000)); // let the error notice clear
+    await wc.executeJavaScript(`document.getElementById('dock').dispatchEvent(new MouseEvent('mouseenter'))`);
     await new Promise((r) => setTimeout(r, 450));
     fs.writeFileSync(path.join(shots, 'pill-ready.png'), (await wc.capturePage()).toPNG());
+    for (const [name, sel] of [['tip-bubble', '#bubble'], ['tip-polish', '#t-polish .disc'], ['tip-meeting', '#t-meeting .disc']]) {
+      await wc.executeJavaScript(`document.querySelector('${sel}').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+      await new Promise((r) => setTimeout(r, 400));
+      fs.writeFileSync(path.join(shots, `pill-${name}.png`), (await wc.capturePage()).toPNG());
+      await wc.executeJavaScript(`document.querySelector('${sel}').dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))`);
+    }
+    await wc.executeJavaScript(`document.getElementById('dock').dispatchEvent(new MouseEvent('mouseleave'))`);
     // Settings tabs (seeds a little sample data first).
     store.addWord('RoyFlow'); store.addWord('Dominic Bouffard');
     store.saveSnippet('my email', 'roy@example.com');

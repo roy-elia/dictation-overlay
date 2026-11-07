@@ -150,9 +150,22 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     ]);
   }
 
+  // The pill's polish chevron: pick a style for the selected text.
+  function polishMenu() {
+    if (!aiReady()) return Menu.buildFromTemplate([{ label: 'Set Up AI Polish…', click: () => onSettings('ai') }]);
+    const styles = [['cleanup', 'Clean Up'], ['polished', 'Polished'], ['formal', 'Formal'], ['casual', 'Casual'], ['concise', 'Concise']];
+    return Menu.buildFromTemplate([
+      { label: 'Rewrite Selection As', enabled: false },
+      ...styles.map(([k, l]) => ({ label: l, click: () => onPolishSelection(k) })),
+      { type: 'separator' },
+      { label: 'Polish Every Dictation', type: 'checkbox', checked: !!config.setting('aiAutoPolish'), click: (i) => set('aiAutoPolish', i.checked) },
+      { label: 'AI Settings…', click: () => onSettings('ai') },
+    ]);
+  }
+
   render();
   updater.on('change', render);
-  return { tray, render, pillMenu };
+  return { tray, render, pillMenu, polishMenu };
 }
 
 module.exports = { createTray, LANGUAGES };

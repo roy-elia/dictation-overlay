@@ -7,4 +7,4 @@ if (process.platform === 'darwin') {
 const noop = () => false;
 module.exports = binding
   ? { available: () => true, ...binding }
-  : { available: noop, start: noop, stop: noop, setRecording: noop, paste: noop, pressKey: noop, isTrusted: noop };
+  : { available: noop, start: noop, stop: noop, setRecording: noop, paste: noop, pressKey: noop, isTrusted: noop, setTrigger: noop, frontmostApp: () => null };

@@ -51,6 +51,10 @@ function openDatabase() {
     CREATE TABLE IF NOT EXISTS snippets (
       id INTEGER PRIMARY KEY, trigger TEXT NOT NULL UNIQUE COLLATE NOCASE, expansion TEXT NOT NULL, created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS meetings (
       id INTEGER PRIMARY KEY, title TEXT NOT NULL, started_at INTEGER NOT NULL, ended_at INTEGER,
       transcript TEXT NOT NULL DEFAULT '', summary TEXT, audio_path TEXT
@@ -58,13 +62,14 @@ function openDatabase() {
   `);
   // Additive migrations for transcripts.
   const cols = new Set(db.prepare('PRAGMA table_info(transcripts)').all().map((c) => c.name));
-  for (const [c, type] of [['raw', 'TEXT'], ['seconds', 'REAL'], ['words', 'INTEGER'], ['kind', "TEXT DEFAULT 'dictation'"]]) {
+  for (const [c, type] of [['raw', 'TEXT'], ['seconds', 'REAL'], ['words', 'INTEGER'], ['kind', "TEXT DEFAULT 'dictation'"], ['app_name', 'TEXT']]) {
     if (!cols.has(c)) db.exec(`ALTER TABLE transcripts ADD COLUMN ${c} ${type}`);
   }
 
   const countWords = (t) => (t.match(/\S+/g) || []).length;
   const q = {
-    insert: db.prepare('INSERT INTO transcripts (created_at, text, target_app, raw, seconds, words, kind) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    insert: db.prepare('INSERT INTO transcripts (created_at, text, target_app, raw, seconds, words, kind, app_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
+    apps: db.prepare("SELECT target_app bundleId, app_name name, COUNT(*) n FROM transcripts WHERE target_app IS NOT NULL AND target_app != '' GROUP BY target_app ORDER BY MAX(created_at) DESC LIMIT 30"),
     recent: db.prepare('SELECT * FROM transcripts ORDER BY created_at DESC LIMIT ?'),
     search: db.prepare('SELECT * FROM transcripts WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?'),
     del: db.prepare('DELETE FROM transcripts WHERE id = ?'),
@@ -79,12 +84,18 @@ function openDatabase() {
     upsertSnippet: db.prepare(`INSERT INTO snippets (trigger, expansion, created_at) VALUES (?, ?, ?)
                                ON CONFLICT(trigger) DO UPDATE SET expansion = excluded.expansion`),
     delSnippet: db.prepare('DELETE FROM snippets WHERE id = ?'),
+    notes: db.prepare('SELECT * FROM notes ORDER BY updated_at DESC'),
+    note: db.prepare('SELECT * FROM notes WHERE id = ?'),
+    addNote: db.prepare('INSERT INTO notes (title, body, created_at, updated_at) VALUES (?, ?, ?, ?)'),
+    updNote: db.prepare('UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ?'),
+    delNote: db.prepare('DELETE FROM notes WHERE id = ?'),
   };
 
   return {
     db,
-    addTranscript: (text, targetApp = null, { raw = null, seconds = null, kind = 'dictation', words = null } = {}) =>
-      q.insert.run(Date.now(), text, targetApp, raw, seconds, words ?? countWords(text), kind).lastInsertRowid,
+    addTranscript: (text, targetApp = null, { raw = null, seconds = null, kind = 'dictation', words = null, appName = null } = {}) =>
+      q.insert.run(Date.now(), text, targetApp, raw, seconds, words ?? countWords(text), kind, appName).lastInsertRowid,
+    recentApps: () => q.apps.all(),
     recentTranscripts: (n = 20) => q.recent.all(n),
     searchTranscripts: (term, n = 200) => (term ? q.search.all(`%${term}%`, n) : q.recent.all(n)),
     deleteTranscript: (id) => q.del.run(id),
@@ -97,6 +108,14 @@ function openDatabase() {
     snippets: () => q.snippets.all(),
     saveSnippet: (trigger, expansion) => q.upsertSnippet.run(trigger.trim(), expansion, Date.now()),
     deleteSnippet: (id) => q.delSnippet.run(id),
+    notes: () => q.notes.all(),
+    saveNote: ({ id, title = '', body = '' }) => {
+      const now = Date.now();
+      if (id) q.updNote.run(String(title), String(body), now, id);
+      else id = Number(q.addNote.run(String(title), String(body), now, now).lastInsertRowid);
+      return q.note.get(id);
+    },
+    deleteNote: (id) => q.delNote.run(id),
   };
 }
 

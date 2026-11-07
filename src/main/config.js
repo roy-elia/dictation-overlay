@@ -17,6 +17,11 @@ const DEFAULT_SETTINGS = {
   languages: [],              // [] = auto-detect; one code = force it; several = auto among them
   whisperModel: 'ggml-large-v3-turbo-q5_0.bin',
   pressEnterCommand: false,   // "press enter" at the end of a dictation sends Return
+  triggerKey: 'fn',           // fn | rightOption | rightCommand
+  defaultFormat: 'formatted', // formatted | casual | lowercase | raw | polish
+  appFormats: [],             // [{bundleId, name, format}]
+  theme: 'system',            // system | light | dark (Settings, Scratchpad)
+  onboarded: false,
   // AI (Claude, user's own key)
   aiAutoPolish: false,        // polish every dictation before pasting
   aiStyle: 'cleanup',         // cleanup | polished | formal | casual | concise | custom

@@ -89,6 +89,9 @@
     ];
   }
 
-  TABS.meetings = () => (openId ? detail(openId) : list());
+  TABS.meetings = () => {
+    if (window.rfSettings.arg) { openId = window.rfSettings.arg; window.rfSettings.arg = null; }
+    return openId ? detail(openId) : list();
+  };
   rf.on('ev:meetings', () => { if (document.querySelector('nav a.on')?.dataset.tab === 'meetings') render(); });
 })();

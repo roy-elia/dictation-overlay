@@ -145,4 +145,13 @@ body.edge-bottom .tab svg { transform: rotate(-90deg); }
 #tip b { font-weight: 700; margin-left: 2px; }
 #tip.error { border-color: rgba(255,75,62,.7); }
 
+/* "Done · See changes" after a polish: a clickable capsule beside the bubble */
+#done { position: fixed; z-index: 11; display: none; align-items: center; gap: 6px; white-space: nowrap;
+  background: var(--black); color: #fff; border: 1px solid #2a2a2d; border-radius: 999px;
+  font: 500 14px/20px -apple-system, system-ui; padding: 6px 14px; cursor: pointer; }
+#done.on { display: inline-flex; }
+#done:hover { background: #1c1c1e; border-color: var(--edge-hi); }
+#done svg { width: 12px; height: 12px; fill: none; stroke: var(--meet); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#done span { color: #a9b4ff; font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

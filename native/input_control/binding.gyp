@@ -15,7 +15,7 @@
             "OTHER_CPLUSPLUSFLAGS": ["-ObjC++", "-fobjc-arc"]
           },
           "link_settings": {
-            "libraries": ["-framework ApplicationServices", "-framework Carbon", "-framework Foundation"]
+            "libraries": ["-framework ApplicationServices", "-framework AppKit", "-framework Carbon", "-framework Foundation"]
           }
         }]
       ]

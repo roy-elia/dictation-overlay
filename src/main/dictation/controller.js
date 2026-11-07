@@ -10,6 +10,7 @@
 // A quick fn tap (<250 ms) is not a dictation; two taps within 400 ms start
 // hands-free.
 const { EventEmitter } = require('events');
+const { applyFormat, formatFor } = require('./formats');
 
 const TAP_MS = 250;
 const DOUBLE_TAP_MS = 400;
@@ -97,6 +98,7 @@ class DictationController extends EventEmitter {
     this.mode = mode;
     this.pressedAt = this.pressedAt || Date.now();
     this.selection = '';
+    this.app = this.input.frontmostApp?.() || null; // the app we'll paste into
     // Command mode grabs the selection first, while it is surely still selected.
     if (mode === 'command') this.selectionP = this.readSelection().catch(() => '');
     this._set('listening');
@@ -152,17 +154,22 @@ class DictationController extends EventEmitter {
         this._set('processing', { stage: 'command' });
         text = await this.ai.command(text, selection);
         kind = 'command';
-      } else if (this.config.setting('aiAutoPolish') && this.ai?.configured()) {
-        this._set('processing', { stage: 'polish' });
-        try { text = await this.ai.polish(text); kind = 'polish'; }
-        catch (e) { notice = `Pasted unpolished: ${e.message}`; }
+      } else {
+        const format = formatFor(this.config, this.app);
+        if (format === 'polish' && this.ai?.configured()) {
+          this._set('processing', { stage: 'polish' });
+          try { text = await this.ai.polish(text); kind = 'polish'; }
+          catch (e) { notice = `Pasted unpolished: ${e.message}`; }
+        } else {
+          text = applyFormat(text, format);
+        }
       }
 
       this.lastTranscript = text;
       await this.insert(text);
       if (pressEnter) this.emit('pressEnter');
-      this.emit('transcript', { text, raw, seconds: clip.seconds, kind });
-      this._set('idle', notice ? { notice } : {});
+      this.emit('transcript', { text, raw, seconds: clip.seconds, kind, app: this.app });
+      this._set('idle', notice ? { notice } : kind === 'polish' ? { polished: true } : {});
     } catch (e) {
       this._fail(e.message);
     }

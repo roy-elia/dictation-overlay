@@ -27,7 +27,7 @@ function updateItem(updater) {
   }
 }
 
-function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady, meetings }) {
+function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady, meetings, onScratchpad, onRender }) {
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
@@ -73,11 +73,16 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     if (!m) return [];
     const st = m.status();
     const mins = st.active ? Math.floor((Date.now() - st.startedAt) / 60000) : 0;
+    const recent = m.list().filter((x) => x.ended_at).slice(0, 3);
     return [
       st.active
         ? { label: `Stop Meeting Notes (${mins} min)`, click: () => m.stop() }
         : { label: 'Start Meeting Notes', click: () => m.start().catch((e) => console.warn('[meeting]', e.message)) },
-      { label: 'Meetings…', click: () => onSettings('meetings') },
+      ...(recent.length ? [
+        { label: 'Recent Meetings', enabled: false },
+        ...recent.map((x) => ({ label: `   ${preview(x.title, 36)}`, sublabel: new Date(x.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }), click: () => onSettings(`meetings:${x.id}`) })),
+      ] : []),
+      { label: 'All Meetings…', click: () => onSettings('meetings') },
     ];
   }
 
@@ -96,6 +101,7 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
   }
 
   function render() {
+    onRender?.();
     const hotkeyWarning = ctx.hotkeysOk === false
       ? [{ label: '⚠︎ fn shortcut needs Accessibility…', click: onPermissions }, { type: 'separator' }]
       : [];
@@ -125,6 +131,7 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
       },
       { type: 'separator' },
       { label: 'History…', click: () => onSettings('history') },
+      { label: 'Scratchpad…', click: () => onScratchpad() },
       { label: 'Dictionary & Snippets…', click: () => onSettings('vocab') },
       { label: 'Settings…', accelerator: 'Cmd+,', registerAccelerator: false, click: () => onSettings('general') },
       { type: 'separator' },
@@ -165,7 +172,7 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
 
   render();
   updater.on('change', render);
-  return { tray, render, pillMenu, polishMenu };
+  return { tray, render, pillMenu, polishMenu, micMenu, languageMenu };
 }
 
-module.exports = { createTray, LANGUAGES };
+module.exports = { createTray, LANGUAGES, updateItem };

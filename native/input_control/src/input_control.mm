@@ -9,6 +9,8 @@
 //   paste()                  posts ⌘V to the focused app
 //   pressKey('return'|'tab'|'z', {cmd?, shift?})
 //   isTrusted(prompt?)       AXIsProcessTrustedWithOptions
+//   setTrigger('fn'|'rightOption'|'rightCommand')
+//   frontmostApp()           {bundleId, name, pid} of the app being typed into
 //
 // Uses an *active* CGEventTap (needs Accessibility) so the hands-free Space,
 // Esc-to-cancel and ⌘⌃V / ⌘⌃C combos don't leak into the focused app.
@@ -18,6 +20,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #include <napi.h>
 #include <atomic>
 #include <string>
@@ -33,6 +36,10 @@ bool gHasTsfn = false;
 
 std::atomic<bool> gRecording{false};
 bool gFnDown = false;
+// Dictation trigger key (setTrigger): fn/🌐, right ⌥ or right ⌘.
+int64_t gTriggerCode = kVK_Function;
+CGEventFlags gTriggerMask = kCGEventFlagMaskSecondaryFn;  // bit that says "trigger is down"
+CGEventFlags gTriggerFamily = 0;                           // its generic modifier bit (ignored for chording)
 bool gFnChorded = false;
 bool gFnCommand = false;  // ⌃ held when fn went down = voice command mode
 int gSwallowKeyUp = -1;  // keycode whose keyUp we must also swallow
@@ -62,12 +69,12 @@ CGEventRef TapCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void
   const int64_t code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
   const CGEventFlags flags = CGEventGetFlags(event);
 
-  if (type == kCGEventFlagsChanged && code == kVK_Function) {
-    const bool down = (flags & kCGEventFlagMaskSecondaryFn) != 0;
+  if (type == kCGEventFlagsChanged && code == gTriggerCode) {
+    const bool down = (flags & gTriggerMask) != 0;
     if (down != gFnDown) {
       gFnDown = down;
       if (down) {
-        const CGEventFlags mods = flags & kMods;
+        const CGEventFlags mods = flags & kMods & ~gTriggerFamily;
         gFnCommand = mods == kCGEventFlagMaskControl;   // ⌃ then fn = command mode
         gFnChorded = mods != 0 && !gFnCommand;           // fn+⌘ etc. is not a dictation press
         if (!gFnChorded) Emit({"fn", "", true, gFnCommand});
@@ -188,6 +195,27 @@ Napi::Value PressKey(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+Napi::Value SetTrigger(const Napi::CallbackInfo& info) {
+  std::string k = info.Length() > 0 ? info[0].ToString().Utf8Value() : "fn";
+  if (k == "rightOption") { gTriggerCode = kVK_RightOption; gTriggerMask = 0x40; gTriggerFamily = kCGEventFlagMaskAlternate; }
+  else if (k == "rightCommand") { gTriggerCode = kVK_RightCommand; gTriggerMask = 0x10; gTriggerFamily = kCGEventFlagMaskCommand; }
+  else { gTriggerCode = kVK_Function; gTriggerMask = kCGEventFlagMaskSecondaryFn; gTriggerFamily = 0; }
+  gFnDown = false;
+  return info.Env().Undefined();
+}
+
+// The app the user is typing into (our panel never activates, so this is it).
+Napi::Value FrontmostApp(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  NSRunningApplication* a = [[NSWorkspace sharedWorkspace] frontmostApplication];
+  if (!a) return env.Null();
+  Napi::Object o = Napi::Object::New(env);
+  o.Set("bundleId", a.bundleIdentifier ? a.bundleIdentifier.UTF8String : "");
+  o.Set("name", a.localizedName ? a.localizedName.UTF8String : "");
+  o.Set("pid", (double)a.processIdentifier);
+  return o;
+}
+
 Napi::Value IsTrusted(const Napi::CallbackInfo& info) {
   bool prompt = info.Length() > 0 && info[0].ToBoolean().Value();
   NSDictionary* opts = @{(__bridge NSString*)kAXTrustedCheckOptionPrompt: @(prompt)};
@@ -201,6 +229,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("paste", Napi::Function::New(env, Paste));
   exports.Set("pressKey", Napi::Function::New(env, PressKey));
   exports.Set("isTrusted", Napi::Function::New(env, IsTrusted));
+  exports.Set("setTrigger", Napi::Function::New(env, SetTrigger));
+  exports.Set("frontmostApp", Napi::Function::New(env, FrontmostApp));
   return exports;
 }
 

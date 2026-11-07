@@ -8,12 +8,19 @@
 
   async function start(deviceId) {
     await cancel();
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
-        channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true,
-      },
-    });
+    const constraints = (id) => ({ audio: {
+      deviceId: id ? { exact: id } : undefined,
+      channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true,
+    } });
+    let fellBack = false;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints(deviceId));
+    } catch (e) {
+      // Chosen mic unplugged: fall back to the system default rather than fail.
+      if (!deviceId || !/Overconstrained|NotFound|NotReadable/i.test(e.name)) throw e;
+      stream = await navigator.mediaDevices.getUserMedia(constraints(null));
+      fellBack = true;
+    }
     ctx = new AudioContext();
     rate = ctx.sampleRate;
     await ctx.audioWorklet.addModule('recorder-worklet.js');
@@ -29,6 +36,7 @@
       for (const fn of levelListeners) fn(rms);
     };
     source.connect(node);
+    return { fellBack };
   }
 
   function resampleTo16k(input, fromRate) {

@@ -12,6 +12,7 @@ const bars = [...wave.children];
 
 let model = { state: 'idle', mode: null };
 let meeting = { active: false };
+let trigger = 'fn';
 let hovering = false, dragging = false, notice = null, noticeTimer = null, live = false;
 const edge = () => (document.body.classList.contains('edge-bottom') ? 'bottom' : document.body.classList.contains('edge-right') ? 'right' : 'left');
 const clock = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : m) + ':' + String(s).padStart(2, '0'); };
@@ -33,8 +34,8 @@ function render() {
   meetingTool.classList.toggle('on', meeting.active);
   meetingTool.querySelector('.disc').dataset.tip = meeting.active ? `Stop meeting notes · ${clock(Date.now() - meeting.startedAt)}` : 'Start meeting notes';
   bubble.dataset.tip = state === 'listening'
-    ? (mode === 'handsfree' ? 'Press <b>fn</b> to finish and paste' : mode === 'command' ? 'Say what to do with the selection' : 'Release <b>fn</b> to paste')
-    : meeting.active ? `Meeting notes · ${clock(Date.now() - meeting.startedAt)}` : 'Dictate <b>fn</b>';
+    ? (mode === 'handsfree' ? `Press <b>${trigger}</b> to finish and paste` : mode === 'command' ? 'Say what to do with the selection' : `Release <b>${trigger}</b> to paste`)
+    : meeting.active ? `Meeting notes · ${clock(Date.now() - meeting.startedAt)}` : `Dictate <b>${trigger}</b>`;
   if (tipFor && !notice) showTip(tipFor);
 }
 
@@ -81,6 +82,28 @@ function showNotice(text, error = false) {
   noticeTimer = setTimeout(() => { notice = null; hideTip(); }, error ? 2800 : 1800);
 }
 
+// ---------- "Done · See changes" ----------
+const done = document.getElementById('done');
+let doneTimer = null;
+function placeBeside(node) {
+  const r = bubble.getBoundingClientRect(), t = node.getBoundingClientRect(), gap = 10;
+  if (edge() === 'left') { node.style.left = `${r.left + 30 + gap}px`; node.style.top = `${r.top + r.height / 2 - t.height / 2}px`; }
+  else if (edge() === 'right') { node.style.left = `${r.right - 30 - gap - t.width}px`; node.style.top = `${r.top + r.height / 2 - t.height / 2}px`; }
+  else { node.style.left = `${r.left + r.width / 2 - t.width / 2}px`; node.style.top = `${r.bottom - 30 - gap - t.height}px`; }
+}
+function showDone() {
+  hideTip();
+  done.classList.add('on');
+  placeBeside(done);
+  api.pillHover(true); // make it clickable while it's up
+  armDone();
+}
+function armDone() { clearTimeout(doneTimer); doneTimer = setTimeout(hideDone, 5000); }
+function hideDone() { clearTimeout(doneTimer); done.classList.remove('on'); if (!hovering) api.pillHover(false); }
+done.addEventListener('mouseenter', () => clearTimeout(doneTimer));     // hovering pauses the timer
+done.addEventListener('mouseleave', armDone);
+done.addEventListener('click', () => { hideDone(); api.pillAction('see-changes'); });
+
 // ---------- live waveform ----------
 const history = new Array(BARS).fill(0);
 const vertical = () => edge() !== 'bottom';
@@ -101,17 +124,20 @@ api.onPillState((s) => {
   model = s;
   if (s.state !== 'listening') { history.fill(0); bars.forEach((b) => { b.style.width = b.style.height = ''; }); }
   render();
-  if (s.notice) showNotice(s.notice, s.state === 'error');
+  if (s.state === 'listening') hideDone();
+  if (s.polished) showDone();
+  else if (s.notice) showNotice(s.notice, s.state === 'error');
 });
 api.onPillEdge((e) => { document.body.className = `edge-${e}`; render(); });
 api.onSound((name) => window.rfAudio.play(name));
 api.on('ev:pill-meeting', (m) => { meeting = m; render(); });
+api.on('ev:pill-trigger', (t) => { trigger = t; render(); });
 setInterval(() => { if (meeting.active) render(); }, 1000);
 
 // ---------- audio commands from main ----------
 api.onAudioCommand(async ({ id, op, deviceId, ...opts }) => {
   try {
-    if (op === 'start') { await window.rfAudio.start(deviceId); return api.audioResult(id, { ok: true }); }
+    if (op === 'start') return api.audioResult(id, { ok: true, ...(await window.rfAudio.start(deviceId)) });
     if (op === 'stop') return api.audioResult(id, { ok: true, clip: await window.rfAudio.stop() });
     if (op === 'cancel') { await window.rfAudio.cancel(); return api.audioResult(id, { ok: true }); }
     if (op === 'devices') return api.audioResult(id, { ok: true, devices: await window.rfAudio.listDevices() });

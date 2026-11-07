@@ -2,6 +2,15 @@
   --bg: #14152a; --side: #10111f; --card: #1d1f38; --card-hi: #252848; --line: rgba(255,255,255,.08);
   --ink: #eef0fa; --dim: rgba(238,240,250,.62); --accent: #8f9bff; --ok: #4fd18b; --warn: #ffb547; --bad: #ff6b5e;
 }
+html[data-theme=light] {
+  --bg: #f5f6fa; --side: #eceef5; --card: #ffffff; --card-hi: #e3e6f2; --line: rgba(20,24,60,.10);
+  --ink: #161833; --dim: rgba(22,24,51,.6); --accent: #4f5bd5;
+}
+html[data-theme=light] select, html[data-theme=light] input[type=text], html[data-theme=light] input[type=password], html[data-theme=light] textarea, html[data-theme=light] kbd { background: #f1f2f8; }
+html[data-theme=light] button.primary { color: #fff; }
+html[data-theme=light] .chip.on { color: #fff; }
+html[data-theme=light] .brand img { filter: none; }
+html[data-theme=light] .sw span { background: #c9cde0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
   font: 13px/1.45 -apple-system, "SF Pro Text", system-ui; -webkit-font-smoothing: antialiased; }

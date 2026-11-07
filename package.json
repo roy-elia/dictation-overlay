@@ -1,6 +1,6 @@
 {
   "name": "dictation-overlay",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Personal voice dictation + accessibility overlay for macOS (Electron)",
   "main": "src/main/main.js",

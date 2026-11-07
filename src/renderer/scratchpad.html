@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>Scratchpad</title>
+  <link rel="stylesheet" href="settings.css" />
+  <style>
+    body { grid-template-columns: 230px 1fr; }
+    aside { padding: 40px 10px 12px; }
+    .new { margin: 0 4px 10px; -webkit-app-region: no-drag; }
+    #search { margin: 0 4px 8px; min-width: 0; width: calc(100% - 8px); -webkit-app-region: no-drag; }
+    #notes { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; -webkit-app-region: no-drag; }
+    .n { padding: 8px 10px; border-radius: 8px; cursor: default; }
+    .n:hover { background: rgba(127,127,160,.08); }
+    .n.on { background: var(--card-hi); }
+    .n b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .n small { color: var(--dim); font-size: 11px; }
+    main { display: flex; flex-direction: column; padding: 30px 28px 18px; }
+    #title { font-size: 20px; font-weight: 700; background: transparent; border: 0; padding: 4px 0; color: var(--ink); outline: none; }
+    #body { flex: 1; min-height: 0; background: transparent; border: 0; resize: none; font: 15px/1.6 -apple-system, system-ui; padding: 8px 0; color: var(--ink); outline: none; }
+    .bar { display: flex; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+    .bar .meta { margin-left: auto; color: var(--dim); font-size: 12px; }
+    .tip { color: var(--dim); font-size: 12px; margin: 2px 0 6px; }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="brand"><img src="../assets/trayTemplate@2x.png" alt="" /> Scratchpad</div>
+    <button class="primary new" id="new">New note</button>
+    <input id="search" type="text" placeholder="Search notes" />
+    <div id="notes"></div>
+  </aside>
+  <main>
+    <input id="title" type="text" placeholder="Untitled" />
+    <div class="tip">Click into the note and hold your dictation key to talk. Everything saves automatically.</div>
+    <textarea id="body" placeholder="Start dictating…"></textarea>
+    <div class="bar">
+      <button id="copy">Copy</button>
+      <button id="polish">Polish with AI</button>
+      <button class="danger" id="del">Delete</button>
+      <span class="meta" id="meta"></span>
+    </div>
+  </main>
+  <script src="scratchpad.js"></script>
+</body>
+</html>

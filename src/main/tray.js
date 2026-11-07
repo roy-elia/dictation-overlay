@@ -75,8 +75,11 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     const hotkeyWarning = ctx.hotkeysOk === false
       ? [{ label: '⚠︎ fn shortcut needs Accessibility…', click: onPermissions }, { type: 'separator' }]
       : [];
+    const words = ctx.stats?.().words || 0;
     tray.setContextMenu(Menu.buildFromTemplate([
       ...hotkeyWarning,
+      { label: `${words.toLocaleString()} words dictated`, click: () => onSettings('history') },
+      { type: 'separator' },
       ...dictationItems(),
       { type: 'separator' },
       { label: 'Microphone', submenu: micMenu() },

@@ -17,7 +17,8 @@ function serverBinary() {
     : path.join(app.getAppPath(), 'vendor', 'whisper.cpp', 'build', 'bin', 'whisper-server');
 }
 
-const modelsDir = () => path.join(app.getPath('userData'), 'models');
+// Fixed location (not userData) so self-tests with a temp profile still find the model.
+const modelsDir = () => path.join(app.getPath('appData'), 'RoyFlow', 'models');
 const modelPath = (name = DEFAULT_MODEL) => path.join(modelsDir(), name);
 
 function freePort() {

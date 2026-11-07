@@ -45,13 +45,58 @@ function openDatabase() {
       text TEXT NOT NULL,
       target_app TEXT
     );
+    CREATE TABLE IF NOT EXISTS dictionary (
+      id INTEGER PRIMARY KEY, word TEXT NOT NULL UNIQUE COLLATE NOCASE, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS snippets (
+      id INTEGER PRIMARY KEY, trigger TEXT NOT NULL UNIQUE COLLATE NOCASE, expansion TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS meetings (
+      id INTEGER PRIMARY KEY, title TEXT NOT NULL, started_at INTEGER NOT NULL, ended_at INTEGER,
+      transcript TEXT NOT NULL DEFAULT '', summary TEXT, audio_path TEXT
+    );
   `);
-  const insert = db.prepare('INSERT INTO transcripts (created_at, text, target_app) VALUES (?, ?, ?)');
-  const recent = db.prepare('SELECT * FROM transcripts ORDER BY created_at DESC LIMIT ?');
+  // Additive migrations for transcripts.
+  const cols = new Set(db.prepare('PRAGMA table_info(transcripts)').all().map((c) => c.name));
+  for (const [c, type] of [['raw', 'TEXT'], ['seconds', 'REAL'], ['words', 'INTEGER'], ['kind', "TEXT DEFAULT 'dictation'"]]) {
+    if (!cols.has(c)) db.exec(`ALTER TABLE transcripts ADD COLUMN ${c} ${type}`);
+  }
+
+  const countWords = (t) => (t.match(/\S+/g) || []).length;
+  const q = {
+    insert: db.prepare('INSERT INTO transcripts (created_at, text, target_app, raw, seconds, words, kind) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    recent: db.prepare('SELECT * FROM transcripts ORDER BY created_at DESC LIMIT ?'),
+    search: db.prepare('SELECT * FROM transcripts WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?'),
+    del: db.prepare('DELETE FROM transcripts WHERE id = ?'),
+    clear: db.prepare('DELETE FROM transcripts'),
+    olderThan: db.prepare('DELETE FROM transcripts WHERE created_at < ?'),
+    stats: db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(words),0) words, COALESCE(SUM(seconds),0) seconds,
+                       COALESCE(SUM(CASE WHEN created_at >= ? THEN words END),0) week FROM transcripts WHERE kind = 'dictation'`),
+    words: db.prepare('SELECT * FROM dictionary ORDER BY created_at DESC'),
+    addWord: db.prepare('INSERT OR IGNORE INTO dictionary (word, created_at) VALUES (?, ?)'),
+    delWord: db.prepare('DELETE FROM dictionary WHERE id = ?'),
+    snippets: db.prepare('SELECT * FROM snippets ORDER BY created_at DESC'),
+    upsertSnippet: db.prepare(`INSERT INTO snippets (trigger, expansion, created_at) VALUES (?, ?, ?)
+                               ON CONFLICT(trigger) DO UPDATE SET expansion = excluded.expansion`),
+    delSnippet: db.prepare('DELETE FROM snippets WHERE id = ?'),
+  };
+
   return {
     db,
-    addTranscript: (text, targetApp = null) => insert.run(Date.now(), text, targetApp).lastInsertRowid,
-    recentTranscripts: (n = 20) => recent.all(n),
+    addTranscript: (text, targetApp = null, { raw = null, seconds = null, kind = 'dictation', words = null } = {}) =>
+      q.insert.run(Date.now(), text, targetApp, raw, seconds, words ?? countWords(text), kind).lastInsertRowid,
+    recentTranscripts: (n = 20) => q.recent.all(n),
+    searchTranscripts: (term, n = 200) => (term ? q.search.all(`%${term}%`, n) : q.recent.all(n)),
+    deleteTranscript: (id) => q.del.run(id),
+    clearTranscripts: () => q.clear.run(),
+    pruneTranscripts: (beforeMs) => q.olderThan.run(beforeMs).changes,
+    stats: () => q.stats.get(Date.now() - 7 * 864e5),
+    words: () => q.words.all(),
+    addWord: (w) => q.addWord.run(w.trim(), Date.now()),
+    deleteWord: (id) => q.delWord.run(id),
+    snippets: () => q.snippets.all(),
+    saveSnippet: (trigger, expansion) => q.upsertSnippet.run(trigger.trim(), expansion, Date.now()),
+    deleteSnippet: (id) => q.delSnippet.run(id),
   };
 }
 

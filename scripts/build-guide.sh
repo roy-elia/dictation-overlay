@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$ROOT/permission-guide"
 OUT="$PKG/build/PermissionGuide.app"
 SIGN_ID="${CODESIGN_IDENTITY:--}"   # "-" = ad-hoc
+VERSION="$(node -p "require('$ROOT/package.json').version")"
 
 # Build each arch separately and lipo them (multi --arch needs full Xcode's xcbuild).
 ARCHS="${ARCHS:-arm64 x86_64}"
@@ -33,13 +34,14 @@ cat > "$OUT/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>RoyFlow Permission Guide</string>
   <key>CFBundleExecutable</key><string>PermissionGuide</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
 </dict>
 </plist>
 PLIST
+sed -i "" "s/__VERSION__/$VERSION/" "$OUT/Contents/Info.plist"
 
 codesign --force --options runtime --sign "$SIGN_ID" "$OUT"
 echo "Built $OUT"

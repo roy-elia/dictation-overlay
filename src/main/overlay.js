@@ -24,6 +24,7 @@ function createOverlay({ config, log = console }) {
   });
   win.setAlwaysOnTop(true, 'floating');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setHiddenInMissionControl(true); // not a thumbnail in Mission Control / App Exposé
   win.setIgnoreMouseEvents(true, { forward: true }); // renderer flips this on hover
   win.loadFile(path.join(__dirname, '..', 'renderer', 'overlay.html'));
 

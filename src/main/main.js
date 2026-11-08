@@ -530,6 +530,7 @@ function openDiff() {
     webPreferences: { preload: path.join(__dirname, '..', 'preload', 'preload.js'), contextIsolation: true, sandbox: true },
   });
   diffWin.setAlwaysOnTop(true, 'floating');
+  diffWin.setHiddenInMissionControl(true);
   diffWin.loadFile(path.join(__dirname, '..', 'renderer', 'diff.html'));
   diffWin.once('ready-to-show', () => diffWin.showInactive());
   diffWin.on('closed', () => { diffWin = null; });

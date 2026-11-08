@@ -28,6 +28,16 @@ const DEFAULT_SETTINGS = {
   aiCustomInstructions: '',
   aiModel: 'claude-opus-5-5',
   aiEffort: 'low',
+  // Rewrite shortcuts: select text, press ⌥1–9 to apply transform N (Claude).
+  transforms: [
+    { name: 'Fix grammar', prompt: 'Fix spelling, grammar and punctuation. Change nothing else.', autoApply: false },
+    { name: 'Make shorter', prompt: 'Make this about half as long, keeping every key point.', autoApply: false },
+    { name: 'Bullet points', prompt: 'Turn this into a concise bulleted list.', autoApply: false },
+    { name: 'Friendlier', prompt: 'Make the tone warmer and friendlier without adding new content.', autoApply: false },
+  ],
+  transformShortcuts: true,
+  stackedMessages: false,     // send each sentence as its own message (Enter between)
+  duckMode: 'auto',           // auto | pause | mute  (what "quiet other audio" does)
   // meetings
   meetingSystemAudio: true,   // also record other participants (needs Screen Recording)
   meetingAutoSummary: true,   // summarize with Claude when a meeting ends

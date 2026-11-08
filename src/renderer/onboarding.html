@@ -17,6 +17,10 @@
     .nav { margin-top: auto; display: flex; justify-content: space-between; padding-top: 24px; }
     #try { width: 100%; min-height: 110px; font-size: 15px; }
     .big { font-size: 15px; padding: 8px 18px; }
+    .meter-wrap { display: flex; align-items: center; gap: 10px; }
+    .meter-wrap small { color: var(--dim); font-size: 12px; min-width: 80px; }
+    .meter { width: 160px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: block; }
+    .meter i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 4px; transition: width .06s linear; }
   </style>
 </head>
 <body>

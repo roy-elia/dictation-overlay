@@ -3,6 +3,7 @@
   const rf = window.royflow;
   const { TABS, h, header, render } = window.rfSettings;
 
+  let imported = '';
   TABS.vocab = async () => {
     const { words, snippets } = await rf.call('vocab:list');
 
@@ -22,7 +23,14 @@
       ...header('Dictionary & Snippets', 'Teach RoyFlow your words, and give long text a short spoken shortcut.'),
 
       h('h2', {}, `Dictionary · ${words.length}`),
-      h('div', { class: 'toolbar' }, wordInput, h('button', { class: 'primary', onclick: addWord }, 'Add')),
+      h('div', { class: 'toolbar' }, wordInput, h('button', { class: 'primary', onclick: addWord }, 'Add'),
+        h('button', { title: 'Import a .txt, .csv or .json word list', onclick: async () => {
+          try {
+            const r = await rf.call('vocab:import');
+            if (r) { imported = `Imported ${r.words} word${r.words === 1 ? '' : 's'} and ${r.snippets} snippet${r.snippets === 1 ? '' : 's'}.`; render(); }
+          } catch (e) { imported = `Couldn’t import: ${e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`; render(); }
+        } }, 'Import…')),
+      imported ? h('p', { class: 'note' }, imported) : null,
       h('div', { class: 'card' },
         words.length
           ? h('div', { class: 'chips' }, words.map((w) => h('span', { class: 'chip', title: 'Click to remove',

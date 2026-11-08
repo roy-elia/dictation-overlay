@@ -7,6 +7,7 @@
   TABS.ai = async () => {
     const S = window.rfSettings.S;
     const st = await rf.call('ai:status');
+    const transforms = (S.transforms || []).map((t) => ({ ...t }));
 
     const key = h('input', { type: 'password', placeholder: st.savedKey ? '•••••••• saved in Keychain' : 'sk-ant-…', autocomplete: 'off' });
     const saveKey = async () => {
@@ -53,6 +54,28 @@
           ['casual', 'Casual'], ['concise', 'Concise'], ['custom', 'Custom (instructions below)'],
         ], S.aiStyle, (v) => set('aiStyle', v))),
         h('div', { class: 'row' }, h('div', { class: 't', style: 'flex:1' }, 'Extra instructions', h('small', {}, 'Applied to every polish.'), h('div', { style: 'height:6px' }), custom))),
+
+      h('h2', {}, 'Rewrite shortcuts'),
+      h('div', { class: 'card' },
+        row('⌥1–9 shortcuts', 'Select text anywhere and press ⌥ plus a number to rewrite it. Turning this on takes over those keys’ special characters.',
+          toggle(S.transformShortcuts, (v) => set('transformShortcuts', v), !st.configured)),
+        ...transforms.map((t, i) => {
+          const name = h('input', { type: 'text', value: t.name || '', placeholder: 'Name', style: 'width:150px' });
+          const prompt = h('input', { type: 'text', value: t.prompt || '', placeholder: 'What to do with the text…', style: 'flex:1;min-width:0' });
+          const save = () => { transforms[i] = { ...transforms[i], name: name.value.trim(), prompt: prompt.value.trim() }; set('transforms', transforms); };
+          name.addEventListener('change', save); prompt.addEventListener('change', save);
+          const auto = h('label', { class: 'chk', title: 'Also run this on every dictation, after formatting' },
+            Object.assign(h('input', { type: 'checkbox' }), { checked: !!t.autoApply, onchange: async (e) => {
+              transforms.forEach((x, j) => { x.autoApply = j === i ? e.target.checked : false; }); // at most one
+              await set('transforms', transforms); render();
+            } }), ' After dictation');
+          return h('div', { class: 'row' },
+            h('span', { class: 'keys' }, h('kbd', {}, '⌥'), ' + ', h('kbd', {}, String(i + 1))),
+            name, prompt, auto,
+            h('button', { class: 'danger', title: 'Remove', onclick: async () => { transforms.splice(i, 1); await set('transforms', transforms); render(); } }, '×'));
+        }),
+        transforms.length < 9 ? h('div', { class: 'row' }, h('div', { class: 't' }, h('small', {}, 'Up to 9 shortcuts.')),
+          h('button', { onclick: async () => { transforms.push({ name: 'New shortcut', prompt: '', autoApply: false }); await set('transforms', transforms); render(); } }, 'Add shortcut')) : null),
 
       h('h2', {}, 'Voice commands'),
       h('div', { class: 'card' },

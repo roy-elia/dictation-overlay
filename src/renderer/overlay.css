@@ -29,7 +29,7 @@ body.edge-right #tools { align-items: flex-end; }
 #bubble {
   position: relative; display: flex; align-items: center; justify-content: center; gap: 6px;
   box-sizing: border-box; background: var(--black); border: 1px solid var(--edge); border-radius: 999px;
-  transition: width .2s var(--spring), height .2s var(--spring), background .12s, border-color .12s, opacity .2s;
+  transition: all .1s var(--ease);   /* every pill state change: 100 ms, no spring */
   cursor: pointer; flex: none;
 }
 body:not(.edge-bottom) #bubble { flex-direction: column; width: 30px; }
@@ -49,17 +49,18 @@ body.edge-bottom #bubble.ready { width: 50px; }
 
 /* listening */
 #bubble.listening .wave { display: flex; }
-body:not(.edge-bottom) #bubble.listening.ptt, body:not(.edge-bottom) #bubble.listening.command { height: 76px; }
-body.edge-bottom #bubble.listening.ptt, body.edge-bottom #bubble.listening.command { width: 76px; }
-body:not(.edge-bottom) #bubble.listening.handsfree { height: 128px; padding: 4px 0; justify-content: space-between; }
-body.edge-bottom #bubble.listening.handsfree { width: 128px; padding: 0 4px; justify-content: space-between; }
+body:not(.edge-bottom) #bubble.listening.ptt, body:not(.edge-bottom) #bubble.listening.command { height: 73px; }
+body.edge-bottom #bubble.listening.ptt, body.edge-bottom #bubble.listening.command { width: 73px; }
+body:not(.edge-bottom) #bubble.listening.handsfree { height: 102.5px; padding: 4px 0; justify-content: space-between; }
+body.edge-bottom #bubble.listening.handsfree { width: 102.5px; padding: 0 4px; justify-content: space-between; }
 #bubble.listening.handsfree .mini { display: inline-flex; }
 #bubble.listening.command { border-color: var(--cmd); }
 
 /* processing */
-body:not(.edge-bottom) #bubble.processing { height: 64px; }
-body.edge-bottom #bubble.processing { width: 64px; }
-#bubble.processing .dots { display: flex; }
+body:not(.edge-bottom) #bubble.processing { height: 98px; }
+body.edge-bottom #bubble.processing { width: 98px; }
+#bubble.processing .wave { display: flex; opacity: .35; }   /* last waveform stays, dimmed */
+#bubble.processing .spin { display: block; }
 
 /* error / meeting */
 #bubble.error { border: 1.5px solid var(--rec); }
@@ -87,11 +88,6 @@ body.edge-bottom .wave i { width: 2.5px; height: 3px; }
 #bubble.live .wave i { background: #fff; }
 #bubble.command .wave i { background: var(--cmd); }
 
-.dots { gap: 4px; align-items: center; }
-body:not(.edge-bottom) .dots { flex-direction: column; }
-.dots i { width: 5px; height: 5px; border-radius: 50%; background: #fff; animation: hop 1s infinite var(--ease); }
-.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes hop { 0%, 60%, 100% { opacity: .35; transform: scale(.8); } 30% { opacity: 1; transform: scale(1); } }
 
 /* small round buttons inside the bubble (hands-free) */
 .mini { width: 20px; height: 20px; border-radius: 50%; border: 0; padding: 0; align-items: center; justify-content: center;
@@ -138,10 +134,13 @@ body.edge-bottom .tab svg { transform: rotate(-90deg); }
 #tip {
   position: fixed; z-index: 10; pointer-events: none; white-space: nowrap;
   background: var(--black); color: #fff; border: 1px solid #2a2a2d; border-radius: 999px;
-  font-size: 14px; line-height: 20px; padding: 6px 14px; opacity: 0; transition: opacity .12s;
+  font-size: 14px; line-height: 20px; padding: 6px 14px; opacity: 0; transition: opacity .12s, translate .18s var(--ease);
+  translate: -4px 0;
   overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
 }
-#tip.on { opacity: 1; }
+#tip.on { opacity: 1; translate: 0 0; }
+body.edge-right #tip { translate: 4px 0; } body.edge-bottom #tip { translate: 0 4px; }
+body.edge-right #tip.on, body.edge-bottom #tip.on { translate: 0 0; }
 #tip b { font-weight: 700; margin-left: 2px; }
 #tip.error { border-color: rgba(255,75,62,.7); }
 
@@ -153,5 +152,34 @@ body.edge-bottom .tab svg { transform: rotate(-90deg); }
 #done:hover { background: #1c1c1e; border-color: var(--edge-hi); }
 #done svg { width: 12px; height: 12px; fill: none; stroke: var(--meet); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #done span { color: #a9b4ff; font-weight: 600; }
+
+/* 8-bar radial spinner (processing) */
+.spin { position: relative; width: 14px; height: 14px; flex: none; }
+.spin i { position: absolute; left: 6.25px; top: 0; width: 1.5px; height: 4px; border-radius: 1px; background: #fff;
+  transform-origin: .75px 7px; animation: spin-fade .8s linear infinite; }
+.spin i:nth-child(1) { transform: rotate(0deg);   animation-delay: -.7s; }
+.spin i:nth-child(2) { transform: rotate(45deg);  animation-delay: -.6s; }
+.spin i:nth-child(3) { transform: rotate(90deg);  animation-delay: -.5s; }
+.spin i:nth-child(4) { transform: rotate(135deg); animation-delay: -.4s; }
+.spin i:nth-child(5) { transform: rotate(180deg); animation-delay: -.3s; }
+.spin i:nth-child(6) { transform: rotate(225deg); animation-delay: -.2s; }
+.spin i:nth-child(7) { transform: rotate(270deg); animation-delay: -.1s; }
+.spin i:nth-child(8) { transform: rotate(315deg); animation-delay: 0s; }
+@keyframes spin-fade { 0% { opacity: 1; } 100% { opacity: .15; } }
+
+/* Toast with an action chip and a countdown underline (cancel → Undo, etc.) */
+#toast { position: fixed; z-index: 12; display: none; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden;
+  background: var(--black); color: #fff; border: 1px solid #2a2a2d; border-radius: 999px;
+  font: 500 14px/20px -apple-system, system-ui; padding: 6px 8px 6px 14px; cursor: default;
+  opacity: 0; scale: .96; transition: opacity .22s var(--ease), scale .42s cubic-bezier(.2,.9,.25,1); }
+#toast.on { display: inline-flex; }
+#toast.in { opacity: 1; scale: 1; }
+#toast .act { background: #2a2a2d; border-radius: 999px; padding: 1px 10px; font-weight: 600; cursor: pointer; }
+#toast .act:hover { background: #3a3a3e; }
+#toast .act:empty { display: none; }
+#toast .bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: rgba(255,255,255,.5); transform-origin: left; }
+#toast.counting .bar { animation: countdown var(--ms, 5000ms) linear forwards; }
+#toast:hover .bar { animation-play-state: paused; }
+@keyframes countdown { to { transform: scaleX(0); } }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

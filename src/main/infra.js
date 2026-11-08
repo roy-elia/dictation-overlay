@@ -70,6 +70,11 @@ function openDatabase() {
   const q = {
     insert: db.prepare('INSERT INTO transcripts (created_at, text, target_app, raw, seconds, words, kind, app_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
     apps: db.prepare("SELECT target_app bundleId, app_name name, COUNT(*) n FROM transcripts WHERE target_app IS NOT NULL AND target_app != '' GROUP BY target_app ORDER BY MAX(created_at) DESC LIMIT 30"),
+    byDay: db.prepare(`SELECT date(created_at / 1000, 'unixepoch', 'localtime') d, COALESCE(SUM(words),0) w, COUNT(*) n
+      FROM transcripts WHERE created_at > ? GROUP BY d`),
+    byApp: db.prepare(`SELECT COALESCE(NULLIF(app_name,''), target_app, 'Unknown') name, COALESCE(SUM(words),0) w
+      FROM transcripts WHERE created_at > ? GROUP BY name ORDER BY w DESC LIMIT 8`),
+    fixes: db.prepare("SELECT COUNT(*) n FROM transcripts WHERE kind = 'polish'"),
     recent: db.prepare('SELECT * FROM transcripts ORDER BY created_at DESC LIMIT ?'),
     search: db.prepare('SELECT * FROM transcripts WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?'),
     del: db.prepare('DELETE FROM transcripts WHERE id = ?'),
@@ -102,6 +107,15 @@ function openDatabase() {
     clearTranscripts: () => q.clear.run(),
     pruneTranscripts: (beforeMs) => q.olderThan.run(beforeMs).changes,
     stats: () => q.stats.get(Date.now() - 7 * 864e5),
+    insights: (days = 140) => {
+      const since = Date.now() - days * 864e5;
+      return { days: q.byDay.all(since), apps: q.byApp.all(Date.now() - 30 * 864e5), fixes: q.fixes.get().n, stats: q.stats.get(Date.now() - 7 * 864e5) };
+    },
+    deleteCategory: (what) => {
+      const tables = { transcripts: ['transcripts'], meetings: ['meetings'], notes: ['notes'], vocab: ['dictionary', 'snippets'] }[what];
+      if (!tables) throw new Error(`unknown category ${what}`);
+      for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
+    },
     words: () => q.words.all(),
     addWord: (w) => q.addWord.run(w.trim(), Date.now()),
     deleteWord: (id) => q.delWord.run(id),

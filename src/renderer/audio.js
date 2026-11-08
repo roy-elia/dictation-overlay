@@ -4,7 +4,10 @@
 (() => {
   let ctx = null, stream = null, source = null, node = null;
   let chunks = [], rate = 48000, peak = 0;
-  const levelListeners = new Set();
+  const levelListeners = new Set(), lostListeners = new Set();
+  let zeroRun = 0, restarts = 0, lastId = null;
+  const DEAD_SAMPLES = 10 * 48000;   // ~10 s of exact digital silence = dead stream
+  const lost = (why) => { for (const fn of lostListeners) fn(why); };
 
   async function start(deviceId) {
     await cancel();
@@ -21,22 +24,48 @@
       stream = await navigator.mediaDevices.getUserMedia(constraints(null));
       fellBack = true;
     }
+    lastId = fellBack ? null : deviceId;
+    chunks = []; peak = 0; restarts = 0;
+    await wire();
+    const track = stream.getAudioTracks()[0];
+    return { fellBack, label: track?.label || '' };
+  }
+
+  // Build the graph on the current stream; chunks/peak carry across restarts.
+  async function wire() {
     ctx = new AudioContext();
     rate = ctx.sampleRate;
     await ctx.audioWorklet.addModule('recorder-worklet.js');
     source = ctx.createMediaStreamSource(stream);
     node = new AudioWorkletNode(ctx, 'recorder');
-    chunks = []; peak = 0;
+    zeroRun = 0;
+    const track = stream.getAudioTracks()[0];
+    if (track) track.onended = () => { if (ctx) lost('disconnected'); };
     node.port.onmessage = ({ data }) => {
       chunks.push(data);
       let sum = 0;
       for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      zeroRun = sum === 0 ? zeroRun + data.length : 0;
+      if (zeroRun > DEAD_SAMPLES * (rate / 48000)) { zeroRun = 0; restartStream(); }
       const rms = Math.sqrt(sum / data.length);
       peak = Math.max(peak, rms);
       for (const fn of levelListeners) fn(rms);
     };
     source.connect(node);
-    return { fellBack };
+  }
+
+  // Dead stream (driver hiccup, Bluetooth profile switch): reopen the mic up to
+  // 3 times, keeping what was recorded so far; then give up and report it.
+  async function restartStream() {
+    if (restarts >= 3) return lost('silent');
+    restarts++;
+    try { source?.disconnect(); node?.disconnect(); } catch { /* gone */ }
+    stream?.getTracks().forEach((t) => t.stop());
+    await ctx?.close().catch(() => {});
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: lastId ? { exact: lastId } : undefined, channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+      await wire();
+    } catch { lost('disconnected'); }
   }
 
   function resampleTo16k(input, fromRate) {
@@ -100,13 +129,17 @@
   const SOUNDS = {
     start: () => blip([660, 880]),
     stop: () => blip([880, 660]),
+    lock: () => blip([990], 0.05, 0.05),              // hands-free locked in
     cancel: () => blip([440, 330], 0.08, 0.05),
-    error: () => blip([300, 220], 0.1, 0.05),
+    error: () => blip([300, 220], 0.1, 0.03),
+    achievement: () => blip([660, 830, 990], 0.06, 0.03),
+    success: () => blip([740, 990], 0.05, 0.03),
   };
 
   window.rfAudio = {
     start, stop, cancel, listDevices,
     onLevel: (fn) => { levelListeners.add(fn); return () => levelListeners.delete(fn); },
+    onLost: (fn) => { lostListeners.add(fn); return () => lostListeners.delete(fn); },
     play: (name) => SOUNDS[name]?.(),
   };
 })();

@@ -106,7 +106,15 @@
       "!**/node_modules/{panel-activation,audio-control,input-control}/{bin,src,node_modules}/**",
       "!**/node_modules/{panel-activation,audio-control,input-control}/build/{Makefile,*.mk,*.gypi,gyp-mac-tool}"
     ],
-    "afterSign": "./scripts/sign.js"
+    "afterSign": "./scripts/sign.js",
+    "protocols": [
+      {
+        "name": "RoyFlow",
+        "schemes": [
+          "royflow"
+        ]
+      }
+    ]
   },
   "author": "Roy Elia"
 }

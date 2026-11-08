@@ -27,7 +27,7 @@ function updateItem(updater) {
   }
 }
 
-function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady, meetings, onScratchpad, onRender }) {
+function createTray({ app, config, updater, dictation, overlay, ctx, onSettings, onPermissions, onPasteLast, onCopyLast, onPolishSelection, aiReady, meetings, onScratchpad, onRender, onHideFor, onTransform }) {
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
@@ -152,6 +152,8 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
       { label: 'Microphone', submenu: micMenu() },
       { label: 'Languages', submenu: languageMenu() },
       { type: 'separator' },
+      { label: 'Transcript History…', click: () => onSettings('history') },
+      { label: 'Hide for 1 Hour', click: () => onHideFor(60 * 60 * 1000) },
       { label: 'Hide Pill', click: () => set('hidePill', true) },
       { label: 'Settings…', click: () => onSettings('general') },
     ]);
@@ -164,6 +166,12 @@ function createTray({ app, config, updater, dictation, overlay, ctx, onSettings,
     return Menu.buildFromTemplate([
       { label: 'Rewrite Selection As', enabled: false },
       ...styles.map(([k, l]) => ({ label: l, click: () => onPolishSelection(k) })),
+      { type: 'separator' },
+      { label: 'Shortcuts', enabled: false },
+      ...(config.setting('transforms') || []).slice(0, 9).filter((t) => t.prompt).map((t, i) => ({
+        label: t.name || `Shortcut ${i + 1}`, accelerator: `Alt+${i + 1}`, registerAccelerator: false, click: () => onTransform(i),
+      })),
+      { label: 'Edit Shortcuts…', click: () => onSettings('ai') },
       { type: 'separator' },
       { label: 'Polish Every Dictation', type: 'checkbox', checked: !!config.setting('aiAutoPolish'), click: (i) => set('aiAutoPolish', i.checked) },
       { label: 'AI Settings…', click: () => onSettings('ai') },

@@ -134,7 +134,11 @@ async function renderGeneral() {
     h('h2', {}, 'Behaviour'),
     h('div', { class: 'card' },
       row('Play sounds', 'Short tones when dictation starts and stops.', toggle(S.soundsEnabled, (v) => set('soundsEnabled', v))),
-      row('Mute audio while dictating', 'Pauses music players, otherwise mutes system output.', toggle(S.muteAudioWhileDictating, (v) => set('muteAudioWhileDictating', v))),
+      row('Quiet other audio while dictating', null, toggle(S.muteAudioWhileDictating, async (v) => { await set('muteAudioWhileDictating', v); render(); })),
+      S.muteAudioWhileDictating ? row('How', 'Pausing only affects Music, Spotify, Podcasts and similar players.', select([
+        ['auto', 'Pause music, otherwise mute'], ['pause', 'Pause music only'], ['mute', 'Mute all sound'],
+      ], S.duckMode || 'auto', (v) => set('duckMode', v))) : null,
+      row('Stacked messages', 'Send each sentence as its own message, pressing Enter after each. Good for chat apps.', toggle(S.stackedMessages, (v) => set('stackedMessages', v))),
       row('“Press enter” voice command', 'End a dictation with “press enter” to send it.', toggle(S.pressEnterCommand, (v) => set('pressEnterCommand', v)))),
 
     h('h2', {}, 'Appearance & System'),

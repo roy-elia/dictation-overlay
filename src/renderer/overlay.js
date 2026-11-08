@@ -68,19 +68,48 @@ document.addEventListener('mouseover', (e) => {
   const el = e.target.closest('[data-tip]');
   if (!el || el === tipFor || notice || dragging) return;
   clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => { tipFor = el; showTip(el); }, el === bubble ? 150 : 60);
+  tipTimer = setTimeout(() => { tipFor = el; showTip(el); }, el === bubble ? 150 : 50);
 });
 document.addEventListener('mouseout', (e) => {
   const el = e.target.closest('[data-tip]');
   if (el && !el.contains(e.relatedTarget)) { clearTimeout(tipTimer); if (!notice) hideTip(); }
 });
 
-function showNotice(text, error = false) {
+const esc = (t) => String(t).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+function showNotice(text, error = false, ms = error ? 2800 : 4000) {
   clearTimeout(noticeTimer);
   notice = text;
-  showTip(bubble, text.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])), error ? 'error' : 'notice');
-  noticeTimer = setTimeout(() => { notice = null; hideTip(); }, error ? 2800 : 1800);
+  showTip(bubble, esc(text), error ? 'error' : 'notice');
+  noticeTimer = setTimeout(() => { notice = null; hideTip(); }, ms);
 }
+
+// ---------- toast: text + action chip + countdown (e.g. "Transcript cancelled · Undo") ----------
+const toast = document.getElementById('toast');
+let toastTimer = null, toastAction = null, toastLeft = 0, toastStarted = 0;
+function showToast({ text, action = null, label = '', ms = 4000 }) {
+  hideTip(); hideDone();
+  toastAction = action;
+  toast.querySelector('.t').textContent = text;
+  toast.querySelector('.act').textContent = label;
+  toast.style.setProperty('--ms', `${ms}ms`);
+  toast.classList.remove('counting', 'in');
+  toast.classList.add('on');
+  placeBeside(toast);
+  void toast.offsetWidth;                  // restart the countdown animation
+  toast.classList.add('in', 'counting');
+  api.pillHover(true);
+  toastLeft = ms; armToast();
+}
+function armToast() { clearTimeout(toastTimer); toastStarted = Date.now(); toastTimer = setTimeout(hideToast, toastLeft); }
+function hideToast() {
+  clearTimeout(toastTimer);
+  toast.classList.remove('on', 'in', 'counting');
+  toastAction = null;
+  if (!hovering) api.pillHover(false);
+}
+toast.addEventListener('mouseenter', () => { clearTimeout(toastTimer); toastLeft -= Date.now() - toastStarted; });
+toast.addEventListener('mouseleave', () => { if (toast.classList.contains('on')) armToast(); });
+toast.querySelector('.act').addEventListener('click', () => { const a = toastAction; hideToast(); if (a) api.pillAction(a); });
 
 // ---------- "Done · See changes" ----------
 const done = document.getElementById('done');
@@ -92,7 +121,7 @@ function placeBeside(node) {
   else { node.style.left = `${r.left + r.width / 2 - t.width / 2}px`; node.style.top = `${r.bottom - 30 - gap - t.height}px`; }
 }
 function showDone() {
-  hideTip();
+  hideTip(); hideToast();
   done.classList.add('on');
   placeBeside(done);
   api.pillHover(true); // make it clickable while it's up
@@ -119,15 +148,20 @@ window.rfAudio.onLevel((rms) => {
 });
 
 // ---------- state from main ----------
+let doneDelay = null;
 api.onPillState((s) => {
   if (s.state === 'listening' && model.state !== 'listening') live = false;
   model = s;
-  if (s.state !== 'listening') { history.fill(0); bars.forEach((b) => { b.style.width = b.style.height = ''; }); }
+  // Processing keeps the last waveform (dimmed); everything else clears it.
+  if (s.state !== 'listening' && s.state !== 'processing') { history.fill(0); bars.forEach((b) => { b.style.width = b.style.height = ''; }); }
   render();
-  if (s.state === 'listening') hideDone();
-  if (s.polished) showDone();
+  if (s.state === 'listening') { hideDone(); hideToast(); clearTimeout(doneDelay); }
+  if (s.toast) showToast(s.toast);
+  else if (s.polished) { clearTimeout(doneDelay); doneDelay = setTimeout(showDone, 750); }
   else if (s.notice) showNotice(s.notice, s.state === 'error');
 });
+api.on('ev:pill-tip', (text) => showNotice(text, false, 2000));
+window.rfAudio.onLost((why) => api.pillAction(why === 'silent' ? 'mic-silent' : 'mic-lost'));
 api.onPillEdge((e) => { document.body.className = `edge-${e}`; render(); });
 api.onSound((name) => window.rfAudio.play(name));
 api.on('ev:pill-meeting', (m) => { meeting = m; render(); });
@@ -153,7 +187,14 @@ api.onAudioCommand(async ({ id, op, deviceId, ...opts }) => {
 navigator.mediaDevices.addEventListener('devicechange', async () => api.devicesChanged(await window.rfAudio.listDevices()));
 
 // ---------- hover = clickable window ----------
-dock.addEventListener('mouseenter', () => { hovering = true; api.pillHover(true); render(); });
+dock.addEventListener('mouseenter', () => {
+  hovering = true; api.pillHover(true); render();
+  // First hover ever: teach that the handle can be moved.
+  if (!localStorage.getItem('dragHintShown') && model.state === 'idle') {
+    localStorage.setItem('dragHintShown', '1');
+    setTimeout(() => { if (hovering && model.state === 'idle') showNotice('Click and drag to move', false, 6000); }, 400);
+  }
+});
 dock.addEventListener('mouseleave', () => { hovering = false; if (!dragging) { api.pillHover(false); if (!notice) hideTip(); } render(); });
 
 // ---------- clicks + dragging the bubble ----------

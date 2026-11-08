@@ -58,6 +58,17 @@
           if (confirm('Delete every saved transcript? Word counts stay.')) { await rf.call('history:clear'); render(); }
         } }, 'Delete All…'))),
 
+      h('h2', {}, 'Delete my data'),
+      h('div', { class: 'card' },
+        ...[['meetings', 'Meeting notes', 'Recordings’ transcripts and summaries.'],
+          ['notes', 'Scratchpad notes', null],
+          ['vocab', 'Dictionary & snippets', null],
+          ['transcripts', 'Transcripts and stats', 'Also resets Insights and word counts.']].map(([k, t, sub]) =>
+          row(t, sub, h('button', { class: 'danger', onclick: async () => {
+            if (confirm(`Delete all ${t.toLowerCase()}? This can’t be undone.`)) { await rf.call('history:delete-category', k); render(); }
+          } }, 'Delete…')))),
+      h('p', { class: 'note' }, 'Everything RoyFlow stores lives on this Mac only. Settings and your API key are kept.'),
+
       h('h2', {}, 'Transcripts'),
       h('div', { class: 'toolbar' }, search),
       h('div', { class: 'card' }, list),

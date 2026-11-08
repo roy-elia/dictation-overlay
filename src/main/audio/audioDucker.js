@@ -43,13 +43,14 @@ class AudioDucker {
   // Serialise duck/restore so rapid start/stop can't interleave.
   _queue(fn) { this.busy = this.busy.then(fn, fn); return this.busy; }
 
-  duck() { return this._queue(() => this._duck()); }
+  // how: 'auto' (pause a known player, else mute) | 'pause' (only pause players) | 'mute' (always mute)
+  duck(how = 'auto') { return this._queue(() => this._duck(how)); }
   restore() { return this._queue(() => this._restore()); }
 
-  async _duck() {
+  async _duck(how = 'auto') {
     if (this.state) return;
     let np = null;
-    if (mediaRemote.available()) {
+    if (how !== 'mute' && mediaRemote.available()) {
       try { np = await mediaRemote.getNowPlaying(); }
       catch (e) { this.log.warn('[ducker] now-playing read failed', e.message); }
     }
@@ -61,6 +62,7 @@ class AudioDucker {
       this.log.info('[ducker] paused', bundle);
       return;
     }
+    if (how === 'pause') { this.state = { mode: 'noop' }; return; }
 
     const before = await systemVolume.read();
     if (before.muted) { this.state = { mode: 'noop' }; return; } // user already muted

@@ -1,6 +1,6 @@
 'use strict';
 const path = require('path');
-const { app, BrowserWindow, ipcMain, session, systemPreferences, clipboard, desktopCapturer, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, systemPreferences, clipboard, desktopCapturer, shell, globalShortcut } = require('electron');
 const { Config } = require('./config');
 const { AudioDucker } = require('./audio/audioDucker');
 const { Permissions } = require('./permissions');
@@ -24,7 +24,37 @@ if (process.env.DICTATION_SELFTEST) {
   app.setPath('userData', require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'royflow-selftest-')));
 }
 const log = console;
+
+// ---------- deep links: royflow://start-hands-free, stop-hands-free, open/<page>, switch-mic?mic_name=… ----------
+const pendingLinks = [];
+app.on('open-url', (e, url) => { e.preventDefault(); dictation ? handleLink(url) : pendingLinks.push(url); });
+if (!process.env.DICTATION_SELFTEST) app.setAsDefaultProtocolClient('royflow');
+function handleLink(raw) {
+  let u;
+  try { u = new URL(raw); } catch { return; }
+  if (u.protocol !== 'royflow:') return;
+  const parts = [u.hostname, ...u.pathname.split('/')].filter(Boolean).map(decodeURIComponent);
+  log.info('[deeplink]', parts.join('/'));
+  switch (parts[0]) {
+    case 'start-hands-free': return dictation.start('handsfree');
+    case 'stop-hands-free': return dictation.finish();
+    case 'cancel': return dictation.cancel();
+    case 'switch-mic': {
+      const name = (u.searchParams.get('mic_name') || '').toLowerCase();
+      const d = ctx.devices.find((x) => x.label.toLowerCase().includes(name));
+      if (!name || !d) return pillNotice(`No microphone matching “${u.searchParams.get('mic_name') || ''}”`);
+      config.set('settings', 'micDeviceId', d.id);
+      return pillNotice(`Using ${d.label}`);
+    }
+    case 'open': {
+      const page = parts[1] || 'general';
+      if (page === 'scratchpad') return openScratchpad();
+      return openSettings(page);
+    }
+  }
+}
 const ctx = { devices: [] }; // shared bits the tray/settings read
+let transformSelection = null;
 let config, ducker, permissions, store, vocab, ai, meetings, updater, trayUi, overlay, whisper, dictation, settingsWin, jabra = null;
 
 // ---------- helpers ----------
@@ -165,6 +195,13 @@ function registerIpc() {
     if (name === 'start') return dictation.start('handsfree');
     if (name === 'stop') return dictation.finish();
     if (name === 'cancel') return dictation.cancel();
+    if (name === 'undo-cancel') return dictation.undoCancel();
+    if (name === 'paste-last') return dictation.lastTranscript && insertFn(dictation.lastTranscript);
+    // Mic went away mid-dictation: keep what was recorded and transcribe it.
+    if (name === 'mic-lost' || name === 'mic-silent') {
+      if (dictation.state !== 'listening') return;
+      return dictation.finish().then(() => pillNotice(name === 'mic-lost' ? 'Microphone disconnected. Pasted what was recorded' : 'Microphone stopped sending audio. Pasted what was recorded'));
+    }
     if (name === 'meeting-stop') return meetings.stop();
     if (name === 'meeting') return meetings.active ? meetings.stop() : meetings.start().catch((e) => pillNotice(e.message, true));
     if (name === 'meetings') return openSettings('meetings');
@@ -214,6 +251,8 @@ function registerIpc() {
   handle('history:list', (term) => store.searchTranscripts(String(term || '').trim(), 300));
   handle('history:stats', () => store.stats());
   handle('history:apps', () => store.recentApps());
+  handle('history:insights', () => store.insights());
+  handle('history:delete-category', (what) => { store.deleteCategory(String(what)); if (what === 'vocab') vocab.invalidate(); broadcast('ev:meetings', null); trayUi?.render(); return true; });
   handle('history:delete', (id) => store.deleteTranscript(Number(id)));
   handle('history:clear', () => store.clearTranscripts());
   handle('history:copy', (text) => clipboard.writeText(String(text)));
@@ -244,6 +283,31 @@ function registerIpc() {
   handle('vocab:delete-word', (id) => { store.deleteWord(Number(id)); vocabChanged(); });
   handle('vocab:save-snippet', (t, e) => { if (String(t).trim() && String(e)) store.saveSnippet(String(t), String(e)); vocabChanged(); });
   handle('vocab:delete-snippet', (id) => { store.deleteSnippet(Number(id)); vocabChanged(); });
+  // Bulk import: .txt (one word per line), .csv (word  |  trigger,expansion), .json ([...] of strings or {word} / {trigger, expansion}).
+  handle('vocab:import', async () => {
+    const { dialog } = require('electron');
+    const r = await dialog.showOpenDialog(settingsWin, { properties: ['openFile'], filters: [{ name: 'Word lists', extensions: ['txt', 'csv', 'json'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const file = r.filePaths[0], raw = require('fs').readFileSync(file, 'utf8');
+    let items = [];
+    if (/\.json$/i.test(file)) {
+      const j = JSON.parse(raw);
+      items = (Array.isArray(j) ? j : j.words || j.dictionary || []).map((x) => (typeof x === 'string' ? { word: x } : x));
+    } else {
+      const cell = (c) => c.trim().replace(/^"(.*)"$/s, '$1').replace(/""/g, '"');
+      items = raw.split(/\r?\n/).filter((l) => l.trim()).map((l) => {
+        const m = l.match(/^\s*("(?:[^"]|"")*"|[^,]*)\s*,(.*)$/s);
+        return m && /\.csv$/i.test(file) ? { trigger: cell(m[1]), expansion: cell(m[2]) } : { word: cell(l) };
+      });
+    }
+    let words = 0, snippets = 0;
+    for (const it of items) {
+      if (it.trigger && it.expansion) { store.saveSnippet(String(it.trigger), String(it.expansion)); snippets++; }
+      else if (String(it.word || '').trim()) { store.addWord(String(it.word).trim()); words++; }
+    }
+    vocabChanged();
+    return { words, snippets };
+  });
   handle('permissions:guide', (panels) => permissions.walkThrough(panels));
 }
 
@@ -293,8 +357,19 @@ app.whenReady().then(async () => {
   overlay = createOverlay({ config, log });
   const insert = createInserter(input, log);
   insertFn = insert;
+  // "Stacked messages": each sentence becomes its own message (Enter between).
+  const sendStacked = async (text) => {
+    const parts = text.match(/[^.!?\n]+[.!?]*["”’)]*\s*/g)?.map((p) => p.trim()).filter(Boolean) || [text];
+    for (let i = 0; i < parts.length; i++) {
+      await insert(parts[i]);
+      await new Promise((r) => setTimeout(r, 120));
+      input.pressKey('return');
+      if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 250));
+    }
+  };
   dictation = new DictationController({
-    audio, whisper, insert, ducker, config, input, vocab, ai, log,
+    audio, whisper, ducker, config, input, vocab, ai, log,
+    insert: (text) => (config.setting('stackedMessages') && dictation.mode !== 'command' ? sendStacked(text) : insert(text)),
     readSelection: () => readSelection(input),
   });
 
@@ -330,8 +405,37 @@ app.whenReady().then(async () => {
     }
   };
 
+  // Rewrite shortcuts: ⌥1–9 applies transform N to the selected text.
+  transformSelection = async (i) => {
+    const t = (config.setting('transforms') || [])[i];
+    if (!t?.prompt || dictation.state !== 'idle') return;
+    if (!ai.configured()) return pillNotice('Add a Claude API key in Settings › AI', true);
+    const sel = await readSelection(input);
+    if (!sel.trim()) return pillNotice(`Select some text, then press ⌥${i + 1} for “${t.name}”`);
+    overlay.win.webContents.send('ev:pill-state', { state: 'processing', stage: 'polish' });
+    try {
+      const out = await ai.command(t.prompt, sel);
+      await insert(out);
+      const fa = input.frontmostApp();
+      lastPolish = { before: sel, after: out, app: fa?.name || null, kind: 'selection' };
+      if (config.setting('historyRetention') !== 'never') store.addTranscript(out, fa?.bundleId || null, { raw: sel, kind: 'polish', appName: fa?.name });
+      overlay.win.webContents.send('ev:pill-state', { state: 'idle', polished: true });
+    } catch (e) { pillNotice(e.message, true); }
+  };
+  const syncTransformKeys = () => {
+    for (let n = 1; n <= 9; n++) if (globalShortcut.isRegistered(`Alt+${n}`)) globalShortcut.unregister(`Alt+${n}`);
+    if (!config.setting('transformShortcuts')) return;
+    (config.setting('transforms') || []).slice(0, 9).forEach((t, i) => {
+      if (t?.prompt && !globalShortcut.register(`Alt+${i + 1}`, () => transformSelection(i))) log.warn(`[transforms] ⌥${i + 1} is taken`);
+    });
+  };
+  syncTransformKeys();
+  config.on('change', (c) => { if (c.key === 'transforms' || c.key === 'transformShortcuts') syncTransformKeys(); });
+  app.on('will-quit', () => globalShortcut.unregisterAll());
+
   dictation.on('state', (s) => { overlay.win.webContents.send('ev:pill-state', s); trayUi?.render(); if (s.state === 'listening') diffWin?.close(); });
   dictation.on('sound', (name) => { if (config.setting('soundsEnabled')) overlay.win.webContents.send('ev:sound', name); });
+  dictation.on('micTip', (label) => overlay.win.webContents.send('ev:pill-tip', `Using ${label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)$/i, '')}`));
   dictation.on('pasteLast', () => dictation.lastTranscript && insert(dictation.lastTranscript));
   dictation.on('copyLast', () => dictation.lastTranscript && clipboard.writeText(dictation.lastTranscript));
   dictation.on('pressEnter', () => setTimeout(() => input.pressKey('return'), 120));
@@ -352,9 +456,15 @@ app.whenReady().then(async () => {
     onPasteLast: () => dictation.lastTranscript && insert(dictation.lastTranscript),
     onCopyLast: () => dictation.lastTranscript && clipboard.writeText(dictation.lastTranscript),
     onPolishSelection: (style) => polishSelection(style),
+    onTransform: (i) => transformSelection(i),
     meetings: () => meetings,
     aiReady: () => ai.configured(),
     onScratchpad: () => openScratchpad(),
+    onHideFor: (ms) => {
+      overlay.setVisible(false);
+      clearTimeout(ctx.hideTimer);
+      ctx.hideTimer = setTimeout(() => overlay.setVisible(!config.setting('hidePill')), ms);
+    },
     onRender: () => trayUi && buildAppMenu({
       config, updater, dictation, meetings: () => meetings,
       stats: () => store.stats(),
@@ -377,6 +487,7 @@ app.whenReady().then(async () => {
   const TRIGGER_LABEL = { fn: 'fn', rightOption: 'right ⌥', rightCommand: 'right ⌘' };
   const sendTrigger = () => overlay.win.webContents.send('ev:pill-trigger', TRIGGER_LABEL[config.setting('triggerKey')] || 'fn');
   config.on('change', (c) => { if (c.key === 'triggerKey') sendTrigger(); });
+  pendingLinks.splice(0).forEach(handleLink);
   overlay.win.webContents.once('did-finish-load', async () => {
     sendTrigger();
     ctx.devices = await audio.devices().catch(() => []);
@@ -469,7 +580,7 @@ async function selfTest() {
     vocab.invalidate();
     openSettings('general');
     await new Promise((r) => settingsWin.once('ready-to-show', r));
-    for (const tab of ['general', 'vocab', 'history', 'ai', 'meetings']) {
+    for (const tab of ['general', 'vocab', 'insights', 'history', 'ai', 'meetings']) {
       settingsWin.webContents.send('ev:settings-tab', tab);
       await new Promise((r) => setTimeout(r, 700));
       fs.writeFileSync(path.join(shots, `settings-${tab}.png`), (await settingsWin.webContents.capturePage()).toPNG());
@@ -480,8 +591,15 @@ async function selfTest() {
     fs.writeFileSync(path.join(shots, 'pill-toolbar.png'), (await wc.capturePage()).toPNG());
     await wc.executeJavaScript(`document.getElementById('dock').dispatchEvent(new MouseEvent('mouseleave'))`);
     wc.send('ev:pill-state', { state: 'idle', polished: true });
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 1200)); // "Done" waits 750 ms
     fs.writeFileSync(path.join(shots, 'pill-done.png'), (await wc.capturePage()).toPNG());
+    // Cancel toast with Undo + countdown
+    wc.send('ev:pill-state', { state: 'idle', toast: { text: 'Transcript cancelled', action: 'undo-cancel', label: 'Undo', ms: 5000 } });
+    await new Promise((r) => setTimeout(r, 1200));
+    fs.writeFileSync(path.join(shots, 'pill-toast.png'), (await wc.capturePage()).toPNG());
+    wc.send('ev:pill-tip', 'Using MacBook Pro Microphone');
+    await new Promise((r) => setTimeout(r, 300));
+    fs.writeFileSync(path.join(shots, 'pill-mictip.png'), (await wc.capturePage()).toPNG());
 
     // Diff popover
     lastPolish = { before: 'um so can we move the review to like thursday at 3', after: 'Can we move the review to Thursday at 3 PM?', app: 'Mail', kind: 'dictation' };

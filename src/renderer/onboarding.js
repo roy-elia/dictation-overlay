@@ -16,6 +16,36 @@ const keyLabel = (k) => ({ fn: 'fn', rightOption: 'right ⌥', rightCommand: 'ri
 
 let step = 0, S = {}, st = null, tried = false;
 
+// Mic test: a live level meter on the permissions page once access is granted.
+let meter = null;
+async function startMeter(bar) {
+  stopMeter();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const ac = new AudioContext(), an = ac.createAnalyser();
+    an.fftSize = 1024;
+    ac.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let heard = false;
+    const tick = () => {
+      an.getFloatTimeDomainData(buf);
+      let s = 0; for (const v of buf) s += v * v;
+      const lvl = Math.min(1, Math.sqrt(s / buf.length) * 8);
+      bar.style.width = `${Math.round(lvl * 100)}%`;
+      if (lvl > 0.15 && !heard) { heard = true; bar.parentElement.nextSibling.textContent = 'Sounds good'; }
+      meter.raf = requestAnimationFrame(tick);
+    };
+    meter = { stream, ac, raf: requestAnimationFrame(tick) };
+  } catch { /* no access yet */ }
+}
+function stopMeter() {
+  if (!meter) return;
+  cancelAnimationFrame(meter.raf);
+  meter.stream.getTracks().forEach((t) => t.stop());
+  meter.ac.close().catch(() => {});
+  meter = null;
+}
+
 const PAGES = [
   // 0 welcome
   () => [
@@ -34,6 +64,12 @@ const PAGES = [
     h('div', { class: 'card' },
       row('Microphone', 'Only while you dictate.',
         st.microphone === 'granted' ? pill('ok', 'Allowed') : h('button', { class: 'primary', onclick: async () => { await rf.call('app:request-mic'); refresh(); } }, 'Allow')),
+      st.microphone === 'granted' ? (() => {
+        const fill = h('i', {});
+        const r = row('Mic test', null, h('div', { class: 'meter-wrap' }, h('span', { class: 'meter' }, fill), h('small', {}, 'Say something')));
+        setTimeout(() => startMeter(fill), 0);
+        return r;
+      })() : null,
       row('Accessibility', 'To detect your dictation key and paste text.',
         st.accessibility ? pill('ok', 'Allowed') : h('button', { class: 'primary', onclick: () => rf.call('permissions:guide', ['accessibility']) }, 'Open Settings…'))),
     h('p', { class: 'note' }, 'After you switch on RoyFlow under Accessibility, come back here; this page updates by itself.'),
@@ -83,6 +119,7 @@ const PAGES = [
 ];
 
 function render() {
+  stopMeter();
   $('steps').replaceChildren(...PAGES.map((_, i) => h('i', { class: i <= step ? 'on' : '' })));
   $('page').replaceChildren(...PAGES[step]().filter(Boolean));
   $('back').style.visibility = step ? 'visible' : 'hidden';
@@ -102,5 +139,5 @@ $('next').onclick = async () => {
 $('back').onclick = () => { if (step) { step--; render(); } };
 rf.on('ev:app-state', refresh);
 rf.on('ev:transcript', () => { if (step === 4 && !tried) { tried = true; const v = $('try').value; render(); $('try').value = v; } });
-setInterval(() => { if (step === 1) refresh(); }, 1500); // pick up permission changes
+setInterval(() => { if (step === 1 && !(st?.accessibility && st?.microphone === 'granted')) refresh(); }, 1500); // pick up permission changes
 refresh().then(render);

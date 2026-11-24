@@ -56,8 +56,11 @@ run_checks() {
   git check-ignore -q .env || echo "FAIL .env is not ignored"
   git ls-files | grep -qE '(^|/)\.env$' && echo "FAIL a .env file is tracked"
   # No tracked file matches a high-confidence secret pattern (file names only, never values).
+  # Known fake fixtures can be listed, one path per line, in .github/ai-secret-allowlist.
+  allow=()
+  [ -f .github/ai-secret-allowlist ] && while read -r a; do case "$a" in (''|'#'*) ;; (*) allow+=(":!$a");; esac; done < .github/ai-secret-allowlist
   git grep -lIE 'AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|authtoken:[[:space:]]*[A-Za-z0-9_]{20,}' \
-    -- . ':!*.example' ':!*.sample' ':!**/test/**' ':!**/tests/**' ':!**/fixtures/**' \
+    -- . ':!*.example' ':!*.sample' ':(exclude,icase,glob)**/test/**' ':(exclude,icase,glob)**/tests/**' ':(exclude,icase,glob)**/fixtures/**' ${allow[@]+"${allow[@]}"} \
        ':!.github/scripts/ai-health-check.sh' ':!.claude/hooks/block_secrets.py' 2>/dev/null \
     | while read -r s; do echo "FAIL possible secret in tracked file: $s (rotate it, then remove it)"; done
 

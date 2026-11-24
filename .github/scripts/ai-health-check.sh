@@ -18,7 +18,12 @@ run_checks() {
       | grep -oE '`[A-Za-z0-9_.][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]*`|\]\([A-Za-z0-9_.][A-Za-z0-9_./-]*\)' \
       | sed -E 's/^`//; s/`$//; s/^\]\(//; s/\)$//' | sort -u | while read -r p; do
         case "$p" in (*'<'*|*'{'*|*'*'*|http*|/*|~*|\$*) continue;; esac
-        [ -e "$p" ] || echo "FAIL missing path in $f: $p"
+        [ -e "$p" ] && continue
+        first="${p%%/*}"
+        # Not a repo path (branch name, package id) or a local-only path (ignored): skip.
+        [ -e "$first" ] || continue
+        git check-ignore -q "$p" 2>/dev/null && continue
+        echo "FAIL missing path in $f: $p"
       done
   done
 
@@ -50,6 +55,11 @@ run_checks() {
   # 7. .env ignored and not tracked.
   git check-ignore -q .env || echo "FAIL .env is not ignored"
   git ls-files | grep -qE '(^|/)\.env$' && echo "FAIL a .env file is tracked"
+  # No tracked file matches a high-confidence secret pattern (file names only, never values).
+  git grep -lIE 'AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|authtoken:[[:space:]]*[A-Za-z0-9_]{20,}' \
+    -- . ':!*.example' ':!*.sample' ':!**/test/**' ':!**/tests/**' ':!**/fixtures/**' \
+       ':!.github/scripts/ai-health-check.sh' ':!.claude/hooks/block_secrets.py' 2>/dev/null \
+    | while read -r s; do echo "FAIL possible secret in tracked file: $s (rotate it, then remove it)"; done
 
   # 8. No nested git repositories (worktrees under .claude/worktrees are fine).
   find . -mindepth 2 -maxdepth 4 -name .git -type d -not -path './node_modules/*' -not -path './.claude/worktrees/*' 2>/dev/null \

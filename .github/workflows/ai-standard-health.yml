@@ -1,0 +1,16 @@
+# ai-standard section 9.4: CI is the final gate.
+name: ai-standard-health
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 13 1 * *"   # monthly
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/ai-health-check.sh
